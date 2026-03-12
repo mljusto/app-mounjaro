@@ -2,15 +2,22 @@ import streamlit as st
 import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
-import plotly.express as px  # Nova biblioteca para o gráfico
+import plotly.express as px
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="💉 Controle Mounjaro", page_icon="💉", layout="wide")
+# Mudamos o layout para "centered" para ficar mais parecido com um app no celular
+st.set_page_config(page_title="Controle Mounjaro", page_icon="💧", layout="centered")
+
+# --- ESTILOS CUSTOMIZADOS (CSS) ---
+st.markdown("""
+    <style>
+    .stMetric { background-color: #f0f2f6; padding: 10px; border-radius: 10px; }
+    </style>
+""", unsafe_allow_html=True)
 
 # --- CONEXÃO COM O GOOGLE SHEETS ---
 @st.cache_resource
 def conectar_planilha():
-    # Pega as credenciais guardadas em segurança no Streamlit
     credenciais = {
         "type": st.secrets["gcp_service_account"]["type"],
         "project_id": st.secrets["gcp_service_account"]["project_id"],
@@ -27,10 +34,7 @@ def conectar_planilha():
     escopos = ['https://www.googleapis.com/auth/spreadsheets', 'https://www.googleapis.com/auth/drive']
     creds = Credentials.from_service_account_info(credenciais, scopes=escopos)
     cliente = gspread.authorize(creds)
-    
-    # ATENÇÃO: Substitua pelo nome exato da sua planilha
-    planilha = cliente.open("Sistema_Mounjaro_DB")
-    return planilha
+    return cliente.open("Sistema_Mounjaro_DB")
 
 # --- CARREGAR DADOS ---
 def carregar_dados():
@@ -38,94 +42,82 @@ def carregar_dados():
         planilha = conectar_planilha()
         aba_frascos = planilha.worksheet("Frascos")
         aba_aplicacoes = planilha.worksheet("Aplicacoes")
-        aba_participantes = planilha.worksheet("Participantes") # Nova aba
+        aba_participantes = planilha.worksheet("Participantes")
         
         df_frascos = pd.DataFrame(aba_frascos.get_all_records())
         df_aplicacoes = pd.DataFrame(aba_aplicacoes.get_all_records())
-        df_participantes = pd.DataFrame(aba_participantes.get_all_records()) # Novos dados
+        df_participantes = pd.DataFrame(aba_participantes.get_all_records())
         
-        # Formatar a coluna Data do df_aplicacoes paradatetime
         if not df_aplicacoes.empty:
             df_aplicacoes['Data'] = pd.to_datetime(df_aplicacoes['Data'], format="%d/%m/%Y")
         
         return df_frascos, df_aplicacoes, df_participantes
     except Exception as e:
-        st.error(f"Erro ao carregar dados da planilha. Verifique as abas e os cabeçalhos. Erro: {e}")
+        st.error(f"Erro ao carregar dados. Erro: {e}")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-# Carregar os dados inicialmentes
 df_frascos, df_aplicacoes, df_participantes = carregar_dados()
 
-# --- TÍTULO ---
-st.title("💉 Sistema de Controle - Mounjaro")
+# --- CABEÇALHO DO APP ---
+st.markdown("<h1 style='text-align: center; color: #1f77b4;'>💧 Mounjaro App</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; color: #666;'>Controle de Doses e Evolução</p>", unsafe_allow_html=True)
+st.divider()
 
 # --- ABAS DO APLICATIVO ---
-tab_dashboard, tab_participantes, tab_registro = st.tabs(["📊 Painel de Resultados", "⚙️ Configurações", "📝 Registrar Dose"])
+tab_dashboard, tab_registro, tab_participantes = st.tabs(["📊 Resultados", "📝 Nova Dose", "⚙️ Ajustes"])
 
 # ==========================================
-# ABA 1: PAINEL DE RESULTADOS (Dashboard)
+# ABA 1: PAINEL DE RESULTADOS
 # ==========================================
 with tab_dashboard:
-    st.header("Resumo do Tratamento")
-    
     if df_frascos.empty:
-        st.warning("Nenhum frasco cadastrado ainda na planilha.")
+        st.info("👋 Bem-vindo! Vá na aba 'Ajustes' para começar.")
     else:
-        # Calcular custo por mg de cada frasco
+        # --- STATUS DO FRASCO ---
         df_frascos['Custo_por_MG'] = df_frascos['Valor Pago'] / df_frascos['MG Total']
-        
-        # FRASCO ATIVO
         frascos_ativos = df_frascos[df_frascos['Status'] == 'Ativo']
+        
         if not frascos_ativos.empty:
             frasco_atual = frascos_ativos.iloc[-1]
-            mg_consumido_atual = df_aplicacoes[df_aplicacoes['ID Frasco'] == frasco_atual['ID Frasco']]['Dose'].sum() if not df_aplicacoes.empty else 0
-            mg_restante = frasco_atual['MG Total'] - mg_consumido_atual
+            mg_consumido = df_aplicacoes[df_aplicacoes['ID Frasco'] == frasco_atual['ID Frasco']]['Dose'].sum() if not df_aplicacoes.empty else 0
+            mg_restante = frasco_atual['MG Total'] - mg_consumido
             
-            # Cards de resumo otimizados para mobile
-            with st.container():
-                c1, c2, c3 = st.columns([2, 1.5, 1])
-                c1.metric("📦 Frasco Ativo", frasco_atual['ID Frasco'])
-                c2.metric("💧 MG Restantes", f"{mg_restante} mg")
-                c3.metric("💰 Custo MG", f"R$ {frasco_atual['Custo_por_MG']:.2f}")
+            st.subheader("📦 Status do Frasco")
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Frasco Ativo", frasco_atual['ID Frasco'])
+            c2.metric("Disponível", f"{mg_restante} mg")
+            c3.metric("Custo / MG", f"R$ {frasco_atual['Custo_por_MG']:.2f}")
             
             if mg_restante <= 10:
-                st.error("⚠️ Atenção: O frasco está no fim! Considere comprar o próximo lote.")
-                
+                st.error("⚠️ Atenção: O frasco está no fim!")
+        
         st.divider()
 
-        # DADOS DOS PARTICIPANTES E GRÁFICO
+        # --- GRÁFICO DE EVOLUÇÃO ---
         if not df_aplicacoes.empty and not df_participantes.empty:
-            # Juntar aplicações com participantes para ter a meta
             df_completo = pd.merge(df_aplicacoes, df_participantes, on='Nome', how='left')
-            
-            # Juntar com frascos para calcular custos
             df_completo = pd.merge(df_completo, df_frascos[['ID Frasco', 'Custo_por_MG']], on='ID Frasco', how='left')
             df_completo['Custo_Dose'] = df_completo['Dose'] * df_completo['Custo_por_MG']
             
-            # --- SEÇÃO 1: GRÁFICO DE EVOLUÇÃO ---
-            st.subheader("📈 Evolução de Peso")
+            st.subheader("📉 Evolução de Peso")
             
-            # Criar o gráfico interativo com Plotly Express
+            # Gráfico mais bonito com fundo branco e linhas suaves
             fig = px.line(df_completo.sort_values(by=['Nome', 'Data']), 
-                          x='Data', 
-                          y='Peso', 
-                          color='Nome',
-                          labels={"Peso": "Peso Atual (kg)", "Data": "Data da Aplicação"},
-                          title="Perda de Peso ao Longo do Tempo")
+                          x='Data', y='Peso', color='Nome', markers=True,
+                          template="plotly_white")
             
-            # Ajustar o layout para mobile (legendas embaixo, margens menores)
+            # Formatando a data no padrão brasileiro no eixo X do gráfico
+            fig.update_xaxes(tickformat="%d/%m/%Y", title_text="")
+            fig.update_yaxes(title_text="Peso (kg)")
             fig.update_layout(legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5),
-                              margin=dict(l=10, r=10, t=40, b=10))
+                              margin=dict(l=0, r=0, t=20, b=0))
             
             st.plotly_chart(fig, use_container_width=True)
-            
-            st.divider()
 
-            # --- SEÇÃO 2: TABELA RESUMO ---
-            st.subheader("👥 Desempenho por Participante")
+            # --- TABELA DE DESEMPENHO ---
+            st.subheader("🏆 Desempenho")
             
             resumo = []
-            
             for p in df_participantes['Nome'].unique():
                 dados_p = df_completo[df_completo['Nome'] == p].sort_values(by='Data')
                 
@@ -133,131 +125,67 @@ with tab_dashboard:
                     peso_inicial = dados_p.iloc[0]['Peso']
                     peso_atual = dados_p.iloc[-1]['Peso']
                     perda = peso_inicial - peso_atual
-                    meta_peso = dados_p.iloc[-1]['Meta de Peso']
-                    total_gasto = dados_p['Custo_Dose'].sum()
-                    mg_total = dados_p['Dose'].sum()
-                    
-                    # Cálculo simples do saldo de mg que a pessoa "tem direito"
-                    # Isso assume que o custo total foi rateado igualmente por mg.
-                    # saldo_mg_teorico = total_investido / custo_por_mg_atual - mg_consumido
-                    # Como não temos o "investimento" de cada um, vamos apenas mostrar o total consumido.
+                    meta = dados_p.iloc[-1]['Meta de Peso']
+                    gasto = dados_p['Custo_Dose'].sum()
                     
                     resumo.append({
-                        "Participante": p,
-                        "Peso Inicial (kg)": peso_inicial,
-                        "Peso Atual (kg)": peso_atual,
-                        "Perda Total (kg)": perda,
-                        "Meta (kg)": meta_peso,
-                        "Faltam p/ Meta (kg)": round(peso_atual - meta_peso, 1) if not pd.isna(meta_peso) else "S/ Meta",
-                        "Consumo (mg)": mg_total,
-                        "Gasto (R$)": round(total_gasto, 2)
+                        "Nome": p,
+                        "Peso Atual": f"{peso_atual} kg",
+                        "Perdido": f"⬇️ {perda:.1f} kg",
+                        "Falta p/ Meta": f"🎯 {round(peso_atual - meta, 1)} kg",
+                        "Investimento": f"R$ {gasto:.2f}"
                     })
-                else:
-                    resumo.append({
-                        "Participante": p,
-                        "Peso Inicial (kg)": "S/ Dados",
-                        "Peso Atual (kg)": "S/ Dados",
-                        "Perda Total (kg)": 0.0,
-                        "Meta (kg)": df_participantes[df_participantes['Nome'] == p].iloc[0]['Meta de Peso'],
-                        "Faltam p/ Meta (kg)": "S/ Dados",
-                        "Consumo (mg)": 0.0,
-                        "Gasto (R$)": 0.0
-                    })
-                
-            df_resumo = pd.DataFrame(resumo)
-            # Formatar tabela para mobile: menos colunas ou usar scroll horizontal
-            st.dataframe(df_resumo, use_container_width=True)
-        else:
-            st.info("Nenhuma aplicação registrada ou nenhum participante cadastrado ainda.")
-
-
-# ==========================================
-# ABA 2: CONFIGURAÇÕES (Admin)
-# ==========================================
-with tab_participantes:
-    st.header("⚙️ Cadastro de Participantes")
-    
-    with st.form("form_novo_participante"):
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            nome_novo = st.text_input("Nome do Participante (como aparecerá no sistema)")
-        with col2:
-            meta_peso_novo = st.number_input("Meta de Peso (kg)", min_value=30.0, step=0.1, help="Deixe em branco se não houver meta.")
             
-        col3, col4 = st.columns([2, 1])
-        with col3:
-            senha_cad = st.text_input("Senha de Admin (para cadastrar)", type="password")
-        with col4:
-            submit_cad = st.form_submit_button("Cadastrar Novo Participante")
-        
-        if submit_cad:
-            if senha_cad == st.secrets["senha_admin"]:
-                if nome_novo:
-                    planilha = conectar_planilha()
-                    aba_participantes = planilha.worksheet("Participantes")
-                    
-                    # Verificar se o nome já existe
-                    participantes_existentes = pd.DataFrame(aba_participantes.get_all_records())['Nome'].tolist()
-                    if nome_novo not in participantes_existentes:
-                        # Adicionar linha na planilha
-                        nova_linha = [nome_novo, float(meta_peso_novo)]
-                        aba_participantes.append_row(nova_linha)
-                        st.success(f"✅ Participante '{nome_novo}' cadastrado com sucesso! Atualize a página.")
-                    else:
-                        st.error(f"❌ O participante '{nome_novo}' já existe.")
-                else:
-                    st.error("❌ O nome do participante é obrigatório.")
-            else:
-                st.error("❌ Senha de administrador incorreta.")
-
-    st.divider()
-    
-    # Lista simples dos participantes cadastrados
-    st.subheader("Lista de Participantes Atuais")
-    if not df_participantes.empty:
-        st.dataframe(df_participantes[['Nome', 'Meta de Peso']], use_container_width=True)
-    else:
-        st.info("Nenhum participante cadastrado ainda.")
+            df_resumo = pd.DataFrame(resumo)
+            # st.dataframe com hide_index=True esconde os números laterais
+            st.dataframe(df_resumo, use_container_width=True, hide_index=True)
 
 
 # ==========================================
-# ABA 3: REGISTRAR DOSE (Admin)
+# ABA 2: REGISTRAR DOSE
 # ==========================================
 with tab_registro:
-    st.header("Registrar Nova Dose")
+    st.header("💉 Nova Aplicação")
     
-    # Pegar lista de frascos ativos
     lista_frascos = df_frascos[df_frascos['Status'] == 'Ativo']['ID Frasco'].tolist() if not df_frascos.empty else []
-    
-    # Pegar lista de participantes cadastrados na aba Participantes
     lista_participantes = df_participantes['Nome'].tolist() if not df_participantes.empty else []
     
     with st.form("form_nova_dose"):
-        col1, col2 = st.columns([2, 1])
-        with col1:
-            data = st.date_input("Data da Aplicação")
-            # Agora a lista de nomes vem da planilha, não é mais fixa
-            nome = st.selectbox("Selecione o Participante", lista_participantes)
-            frasco_selecionado = st.selectbox("Lote/Frasco Utilizado", lista_frascos)
-        with col2:
-            dose = st.number_input("Dose Aplicada (mg)", min_value=2.5, step=2.5)
+        # Format="DD/MM/YYYY" garante o calendário brasileiro
+        data = st.date_input("Data da Aplicação", format="DD/MM/YYYY")
+        nome = st.selectbox("Participante", lista_participantes)
+        frasco_selecionado = st.selectbox("Frasco Utilizado", lista_frascos)
+        
+        c1, c2 = st.columns(2)
+        with c1:
+            dose = st.number_input("Dose (mg)", min_value=2.5, step=2.5)
+        with c2:
             peso = st.number_input("Peso Atual (kg)", min_value=40.0, step=0.1)
-            senha = st.text_input("Senha de Admin (para salvar)", type="password")
             
-        submit = st.form_submit_button("Salvar Registro de Dose")
+        senha = st.text_input("Senha de Admin", type="password")
+        submit = st.form_submit_button("Salvar Registro", use_container_width=True)
         
         if submit:
-            if senha == st.secrets["senha_admin"]: # Proteção simples
-                # Converter data para texto no formato brasileiro
+            if senha == st.secrets["senha_admin"]:
                 data_str = data.strftime("%d/%m/%Y")
-                
-                planilha = conectar_planilha()
-                aba_aplicacoes = planilha.worksheet("Aplicacoes")
-                
-                # Adicionar linha na planilha
-                nova_linha = [data_str, nome, float(dose), float(peso), frasco_selecionado]
-                aba_aplicacoes.append_row(nova_linha)
-                
-                st.success(f"✅ Aplicação de {nome} registrada com sucesso! Atualize a página para ver no Painel.")
+                aba_aplicacoes = conectar_planilha().worksheet("Aplicacoes")
+                aba_aplicacoes.append_row([data_str, nome, float(dose), float(peso), frasco_selecionado])
+                st.success(f"✅ Salvo! {nome} tomou {dose}mg.")
             else:
-                st.error("❌ Senha incorreta. Apenas o administrador pode salvar.")
+                st.error("❌ Senha incorreta.")
+
+
+# ==========================================
+# ABA 3: CONFIGURAÇÕES
+# ==========================================
+with tab_participantes:
+    st.header("⚙️ Participantes")
+    
+    with st.form("form_novo_participante"):
+        nome_novo = st.text_input("Nome do Participante")
+        meta_peso_novo = st.number_input("Meta de Peso (kg)", min_value=30.0, step=0.1)
+        senha_cad = st.text_input("Senha de Admin", type="password")
+        submit_cad = st.form_submit_button("Cadastrar", use_container_width=True)
+        
+        if submit_cad:
+            if
