@@ -51,7 +51,7 @@ def carregar_dados():
             # Arruma a data
             df_aplicacoes['Data'] = pd.to_datetime(df_aplicacoes['Data'], format="%d/%m/%Y")
             
-            # TRADUTOR BRASILEIRO: Troca vírgula por ponto e força virar número matemático
+            # TRADUTOR BRASILEIRO: Troca vírgula por ponto e força virar número
             df_aplicacoes['Dose'] = df_aplicacoes['Dose'].astype(str).str.replace(',', '.').astype(float)
             df_aplicacoes['Peso'] = df_aplicacoes['Peso'].astype(str).str.replace(',', '.').astype(float)
         
@@ -59,6 +59,9 @@ def carregar_dados():
     except Exception as e:
         st.error(f"Erro ao carregar dados. Erro: {e}")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
+
+# ESTA É A LINHA QUE ESTAVA FALTANDO 👇
+df_frascos, df_aplicacoes, df_participantes = carregar_dados()
 
 # --- CABEÇALHO DO APP ---
 st.markdown("<h1 style='text-align: center; color: #1f77b4;'>💧 Mounjaro App</h1>", unsafe_allow_html=True)
