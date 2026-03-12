@@ -48,10 +48,7 @@ def carregar_dados():
         df_participantes = pd.DataFrame(aba_participantes.get_all_records())
         
         if not df_aplicacoes.empty:
-            # Arruma a data
             df_aplicacoes['Data'] = pd.to_datetime(df_aplicacoes['Data'], format="%d/%m/%Y")
-            
-            # TRADUTOR BRASILEIRO: Troca vírgula por ponto e força virar número
             df_aplicacoes['Dose'] = df_aplicacoes['Dose'].astype(str).str.replace(',', '.').astype(float)
             df_aplicacoes['Peso'] = df_aplicacoes['Peso'].astype(str).str.replace(',', '.').astype(float)
         
@@ -60,7 +57,6 @@ def carregar_dados():
         st.error(f"Erro ao carregar dados. Erro: {e}")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
-# ESTA É A LINHA QUE ESTAVA FALTANDO 👇
 df_frascos, df_aplicacoes, df_participantes = carregar_dados()
 
 # --- CABEÇALHO DO APP ---
@@ -94,6 +90,8 @@ with tab_dashboard:
             
             if mg_restante <= 10:
                 st.error("⚠️ Atenção: O frasco está no fim!")
+        else:
+            st.warning("Nenhum frasco ativo no momento. Cadastre um novo na aba Ajustes.")
         
         st.divider()
 
@@ -145,13 +143,13 @@ with tab_dashboard:
 with tab_registro:
     st.header("💉 Nova Aplicação")
     
-    lista_frascos = df_frascos[df_frascos['Status'] == 'Ativo']['ID Frasco'].tolist() if not df_frascos.empty else []
+    lista_frascos_ativos = df_frascos[df_frascos['Status'] == 'Ativo']['ID Frasco'].tolist() if not df_frascos.empty else []
     lista_participantes = df_participantes['Nome'].tolist() if not df_participantes.empty else []
     
     with st.form("form_nova_dose"):
         data = st.date_input("Data da Aplicação", format="DD/MM/YYYY")
         nome = st.selectbox("Participante", lista_participantes)
-        frasco_selecionado = st.selectbox("Frasco Utilizado", lista_frascos)
+        frasco_selecionado = st.selectbox("Frasco Utilizado", lista_frascos_ativos)
         
         c1, c2 = st.columns(2)
         with c1:
@@ -159,35 +157,86 @@ with tab_registro:
         with c2:
             peso = st.number_input("Peso Atual (kg)", min_value=40.0, step=0.1)
             
-        senha = st.text_input("Senha de Admin", type="password")
+        senha_dose = st.text_input("Senha de Admin", type="password", key="senha_dose")
         submit = st.form_submit_button("Salvar Registro", use_container_width=True)
         
         if submit:
-            if senha == st.secrets["senha_admin"]:
-                data_str = data.strftime("%d/%m/%Y")
-                aba_aplicacoes = conectar_planilha().worksheet("Aplicacoes")
-                aba_aplicacoes.append_row([data_str, nome, float(dose), float(peso), frasco_selecionado])
-                st.success(f"✅ Salvo! {nome} tomou {dose}mg.")
+            if senha_dose == st.secrets["senha_admin"]:
+                if frasco_selecionado:
+                    data_str = data.strftime("%d/%m/%Y")
+                    aba_aplicacoes = conectar_planilha().worksheet("Aplicacoes")
+                    aba_aplicacoes.append_row([data_str, nome, float(dose), float(peso), frasco_selecionado])
+                    st.success(f"✅ Salvo! {nome} tomou {dose}mg. Atualize a página.")
+                else:
+                    st.error("❌ Não há frascos ativos para registrar a dose.")
             else:
                 st.error("❌ Senha incorreta.")
 
 # ==========================================
-# ABA 3: CONFIGURAÇÕES
+# ABA 3: CONFIGURAÇÕES E ADMINISTRAÇÃO
 # ==========================================
 with tab_participantes:
-    st.header("⚙️ Ajustes e Administração")
+    st.header("⚙️ Ajustes do Sistema")
     
-    # --- NOVO: BOTÃO PARA A PLANILHA ---
-    st.subheader("📂 Banco de Dados")
-    st.markdown("Acesse a planilha base para correções manuais ou auditoria:")
-    st.link_button("📊 Abrir Planilha no Google Sheets", "https://docs.google.com/spreadsheets/d/1OVKS6W9BKXlyQtCrLblPid-87WyBw3lRQPsGWG5-Ka8/edit?usp=sharing", use_container_width=True)
+    # --- GESTÃO DE FRASCOS ---
+    st.subheader("📦 Gestão de Frascos")
+    
+    col_f1, col_f2 = st.columns(2)
+    
+    with col_f1:
+        with st.form("form_novo_frasco"):
+            st.markdown("**1. Cadastrar Lote Novo**")
+            novo_id = st.text_input("Nome do Lote (Ex: Lote_02)")
+            novo_mg = st.number_input("MG Total", min_value=10.0, step=10.0, value=90.0)
+            novo_valor = st.number_input("Valor Pago (R$)", min_value=0.0, step=10.0, value=2750.0)
+            senha_add_f = st.text_input("Senha", type="password", key="s_add_f")
+            submit_add_f = st.form_submit_button("Cadastrar Frasco", use_container_width=True)
+            
+            if submit_add_f:
+                if senha_add_f == st.secrets["senha_admin"]:
+                    if novo_id:
+                        aba_frascos = conectar_planilha().worksheet("Frascos")
+                        aba_frascos.append_row([novo_id, float(novo_mg), float(novo_valor), "Ativo"])
+                        st.success(f"✅ {novo_id} cadastrado como Ativo! Atualize a página.")
+                    else:
+                        st.error("Preencha o nome do lote.")
+                else:
+                    st.error("Senha incorreta.")
+
+    with col_f2:
+        with st.form("form_inativar_frasco"):
+            st.markdown("**2. Esgotar Lote Atual**")
+            lista_ativos = df_frascos[df_frascos['Status'] == 'Ativo']['ID Frasco'].tolist() if not df_frascos.empty else []
+            frasco_inativar = st.selectbox("Selecione o Frasco", lista_ativos)
+            senha_ina_f = st.text_input("Senha", type="password", key="s_ina_f")
+            submit_ina_f = st.form_submit_button("Marcar como Esgotado", use_container_width=True)
+            
+            if submit_ina_f:
+                if senha_ina_f == st.secrets["senha_admin"]:
+                    if frasco_inativar:
+                        try:
+                            aba_frascos = conectar_planilha().worksheet("Frascos")
+                            # Procura a célula onde está o nome do frasco
+                            celula = aba_frascos.find(frasco_inativar)
+                            # Atualiza a coluna 4 (Status) daquela linha para "Esgotado"
+                            aba_frascos.update_cell(celula.row, 4, "Esgotado")
+                            st.success(f"✅ {frasco_inativar} esgotado! Atualize a página.")
+                        except Exception as e:
+                            st.error("Erro ao tentar inativar. Verifique a planilha.")
+                    else:
+                        st.error("Nenhum frasco selecionado.")
+                else:
+                    st.error("Senha incorreta.")
+
     st.divider()
-    
+
+    # --- CADASTRO DE PARTICIPANTES ---
+    st.subheader("👥 Gestão de Participantes")
     with st.form("form_novo_participante"):
         nome_novo = st.text_input("Nome do Participante")
         meta_peso_novo = st.number_input("Meta de Peso (kg)", min_value=30.0, step=0.1)
-        senha_cad = st.text_input("Senha de Admin", type="password")
-        submit_cad = st.form_submit_button("Cadastrar", use_container_width=True)
+        senha_cad = st.text_input("Senha de Admin", type="password", key="s_cad_p")
+        submit_cad = st.form_submit_button("Cadastrar Participante", use_container_width=True)
         
         if submit_cad:
             if senha_cad == st.secrets["senha_admin"]:
@@ -197,7 +246,7 @@ with tab_participantes:
                     
                     if nome_novo not in nomes_existentes:
                         aba_participantes.append_row([nome_novo, float(meta_peso_novo)])
-                        st.success(f"✅ '{nome_novo}' cadastrado!")
+                        st.success(f"✅ '{nome_novo}' cadastrado! Atualize a página.")
                     else:
                         st.error("❌ Participante já existe.")
                 else:
@@ -205,7 +254,12 @@ with tab_participantes:
             else:
                 st.error("❌ Senha incorreta.")
 
-    st.divider()
-    st.subheader("Cadastrados")
     if not df_participantes.empty:
-        st.dataframe(df_participantes, use_container_width=True, hide_index=True)
+        with st.expander("Ver lista de participantes cadastrados"):
+            st.dataframe(df_participantes, use_container_width=True, hide_index=True)
+            
+    st.divider()
+    
+    # Botão de emergência para a planilha
+    st.markdown("<small>Acesso direto ao Banco de Dados (Google Sheets)</small>", unsafe_allow_html=True)
+    st.link_button("📊 Abrir Planilha Base", "https://docs.google.com/spreadsheets/d/1OVKS6W9BKXlyQtCrLblPid-87WyBw3lRQPsGWG5-Ka8/edit?usp=sharing", use_container_width=True)
