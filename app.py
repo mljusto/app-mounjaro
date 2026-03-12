@@ -5,7 +5,6 @@ from google.oauth2.service_account import Credentials
 import plotly.express as px
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
-# Mudamos o layout para "centered" para ficar mais parecido com um app no celular
 st.set_page_config(page_title="Controle Mounjaro", page_icon="💧", layout="centered")
 
 # --- ESTILOS CUSTOMIZADOS (CSS) ---
@@ -73,7 +72,6 @@ with tab_dashboard:
     if df_frascos.empty:
         st.info("👋 Bem-vindo! Vá na aba 'Ajustes' para começar.")
     else:
-        # --- STATUS DO FRASCO ---
         df_frascos['Custo_por_MG'] = df_frascos['Valor Pago'] / df_frascos['MG Total']
         frascos_ativos = df_frascos[df_frascos['Status'] == 'Ativo']
         
@@ -93,7 +91,6 @@ with tab_dashboard:
         
         st.divider()
 
-        # --- GRÁFICO DE EVOLUÇÃO ---
         if not df_aplicacoes.empty and not df_participantes.empty:
             df_completo = pd.merge(df_aplicacoes, df_participantes, on='Nome', how='left')
             df_completo = pd.merge(df_completo, df_frascos[['ID Frasco', 'Custo_por_MG']], on='ID Frasco', how='left')
@@ -101,12 +98,10 @@ with tab_dashboard:
             
             st.subheader("📉 Evolução de Peso")
             
-            # Gráfico mais bonito com fundo branco e linhas suaves
             fig = px.line(df_completo.sort_values(by=['Nome', 'Data']), 
                           x='Data', y='Peso', color='Nome', markers=True,
                           template="plotly_white")
             
-            # Formatando a data no padrão brasileiro no eixo X do gráfico
             fig.update_xaxes(tickformat="%d/%m/%Y", title_text="")
             fig.update_yaxes(title_text="Peso (kg)")
             fig.update_layout(legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5),
@@ -114,7 +109,6 @@ with tab_dashboard:
             
             st.plotly_chart(fig, use_container_width=True)
 
-            # --- TABELA DE DESEMPENHO ---
             st.subheader("🏆 Desempenho")
             
             resumo = []
@@ -137,9 +131,7 @@ with tab_dashboard:
                     })
             
             df_resumo = pd.DataFrame(resumo)
-            # st.dataframe com hide_index=True esconde os números laterais
             st.dataframe(df_resumo, use_container_width=True, hide_index=True)
-
 
 # ==========================================
 # ABA 2: REGISTRAR DOSE
@@ -151,7 +143,6 @@ with tab_registro:
     lista_participantes = df_participantes['Nome'].tolist() if not df_participantes.empty else []
     
     with st.form("form_nova_dose"):
-        # Format="DD/MM/YYYY" garante o calendário brasileiro
         data = st.date_input("Data da Aplicação", format="DD/MM/YYYY")
         nome = st.selectbox("Participante", lista_participantes)
         frasco_selecionado = st.selectbox("Frasco Utilizado", lista_frascos)
@@ -174,7 +165,6 @@ with tab_registro:
             else:
                 st.error("❌ Senha incorreta.")
 
-
 # ==========================================
 # ABA 3: CONFIGURAÇÕES
 # ==========================================
@@ -188,4 +178,22 @@ with tab_participantes:
         submit_cad = st.form_submit_button("Cadastrar", use_container_width=True)
         
         if submit_cad:
-            if
+            if senha_cad == st.secrets["senha_admin"]:
+                if nome_novo:
+                    aba_participantes = conectar_planilha().worksheet("Participantes")
+                    nomes_existentes = pd.DataFrame(aba_participantes.get_all_records())['Nome'].tolist() if not pd.DataFrame(aba_participantes.get_all_records()).empty else []
+                    
+                    if nome_novo not in nomes_existentes:
+                        aba_participantes.append_row([nome_novo, float(meta_peso_novo)])
+                        st.success(f"✅ '{nome_novo}' cadastrado!")
+                    else:
+                        st.error("❌ Participante já existe.")
+                else:
+                    st.error("❌ Preencha o nome.")
+            else:
+                st.error("❌ Senha incorreta.")
+
+    st.divider()
+    st.subheader("Cadastrados")
+    if not df_participantes.empty:
+        st.dataframe(df_participantes, use_container_width=True, hide_index=True)
