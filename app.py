@@ -205,23 +205,19 @@ with tab_financas:
             
             saldo = pago_total - gasto_total
             
-            # Formatação do Saldo e Situação
+            # Formatação DIRETA do Saldo na mesma coluna da situação
             if saldo > 0.01:
-                situacao = "🟢 Tem Crédito"
-                valor_saldo = f"+ R$ {saldo:.2f}"
+                texto_saldo = f"🟢 Crédito: R$ {saldo:.2f}"
             elif saldo < -0.01:
-                situacao = "🔴 Está Devendo"
-                valor_saldo = f"- R$ {abs(saldo):.2f}"
+                texto_saldo = f"🔴 Deve: R$ {abs(saldo):.2f}"
             else:
-                situacao = "⚪ Quitado"
-                valor_saldo = "R$ 0.00"
+                texto_saldo = "⚪ Quitado"
             
             balanco.append({
-                "Participante": p,
-                "Total Pago": f"R$ {pago_total:.2f}",
-                "Total Consumido": f"R$ {gasto_total:.2f}",
-                "Saldo": valor_saldo,
-                "Situação": situacao
+                "Nome": p,
+                "Consumo": f"R$ {gasto_total:.2f}",
+                "Pagos": f"R$ {pago_total:.2f}",
+                "Saldo Atual": texto_saldo
             })
             
         st.dataframe(pd.DataFrame(balanco), use_container_width=True, hide_index=True)
