@@ -53,7 +53,7 @@ def carregar_dados():
         
         return df_frascos, df_aplicacoes, df_participantes, df_pagamentos
     except Exception as e:
-        st.error(f"Erro ao carregar dados. Verifique se criou a aba Pagamentos. Erro: {e}")
+        st.error(f"Erro ao carregar dados. Verifique as abas da planilha. Erro: {e}")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 df_frascos, df_aplicacoes, df_participantes, df_pagamentos = carregar_dados()
@@ -97,7 +97,6 @@ with tab_dashboard:
                 if not dados_p.empty:
                     ultima_data = dados_p['Data'].max()
                     proxima_data = ultima_data + pd.Timedelta(days=7)
-                    # Só mostra se estiver no futuro ou atrasado até 2 dias
                     if proxima_data >= pd.Timestamp.now() - pd.Timedelta(days=2):
                         proximas.append({"Participante": p, "Próxima Aplicação": proxima_data.strftime("%d/%m/%Y")})
             
@@ -131,32 +130,30 @@ with tab_dashboard:
                     meta = dados_p.iloc[-1]['Meta de Peso']
                     perda = peso_ini - peso_atu
                     
-                    # Cálculo da barra de progresso (0 a 100)
                     progresso = 0
                     if peso_ini > meta:
                         progresso = int(((peso_ini - peso_atu) / (peso_ini - meta)) * 100)
-                        progresso = max(0, min(100, progresso)) # Trava entre 0 e 100
+                        progresso = max(0, min(100, progresso))
                     
                     resumo.append({
                         "Nome": p,
-                        "Peso": f"{peso_atu} kg",
+                        "Peso Atual": f"{peso_atu} kg",
                         "Perdido": f"⬇️ {perda:.1f} kg",
                         "Progresso Meta": progresso,
                     })
             
-            # Usando column_config para desenhar a barra de progresso!
             st.dataframe(
                 pd.DataFrame(resumo), 
                 use_container_width=True, 
                 hide_index=True,
                 column_config={
-                    "Progresso Meta": st.column_config.ProgressColumn("Progresso (%)", format="%d%%", min_value=0, max_value=100)
+                    "Progresso Meta": st.column_config.ProgressColumn("Avanço p/ Meta", format="%d%%", min_value=0, max_value=100)
                 }
             )
 
 
 # ==========================================
-# ABA 2: REGISTRAR DOSE (COM AUTO-PREENCHIMENTO)
+# ABA 2: REGISTRAR DOSE
 # ==========================================
 with tab_registro:
     st.header("💉 Nova Aplicação")
@@ -164,10 +161,8 @@ with tab_registro:
     lista_frascos = df_frascos[df_frascos['Status'] == 'Ativo']['ID Frasco'].tolist() if not df_frascos.empty else []
     lista_participantes = df_participantes['Nome'].tolist() if not df_participantes.empty else []
     
-    # O seletor de nome FICA FORA do form para o Streamlit poder ler ele na hora
     nome_selecionado = st.selectbox("1. Selecione o Participante", lista_participantes)
     
-    # Lógica de auto-preenchimento do peso
     peso_padrao = 80.0
     if not df_aplicacoes.empty and nome_selecionado in df_aplicacoes['Nome'].values:
         ultimo_peso_registrado = df_aplicacoes[df_aplicacoes['Nome'] == nome_selecionado].iloc[-1]['Peso']
@@ -181,7 +176,7 @@ with tab_registro:
         
         c1, c2 = st.columns(2)
         with c1: dose = st.number_input("Dose (mg)", min_value=2.5, step=2.5)
-        with c2: peso = st.number_input("Peso Atual (kg)", min_value=40.0, step=0.1, value=peso_padrao) # Aqui o peso auto-preenche
+        with c2: peso = st.number_input("Peso Atual (kg)", min_value=40.0, step=0.1, value=peso_padrao)
             
         senha_dose = st.text_input("Senha de Admin", type="password")
         if st.form_submit_button("Salvar Registro", use_container_width=True):
@@ -194,29 +189,39 @@ with tab_registro:
 
 
 # ==========================================
-# ABA 3: FINANÇAS (QUEM DEVE E QUEM PAGOU)
+# ABA 3: FINANÇAS (CÁLCULO DE SALDO)
 # ==========================================
 with tab_financas:
     st.header("💰 Controle Financeiro")
     
     if not df_aplicacoes.empty and not df_participantes.empty:
-        # Calcular os gastos totais
         df_gastos = pd.merge(df_aplicacoes, df_frascos[['ID Frasco', 'Custo_por_MG']], on='ID Frasco', how='left')
         df_gastos['Custo_Dose'] = df_gastos['Dose'] * df_gastos['Custo_por_MG']
         
         balanco = []
         for p in df_participantes['Nome'].unique():
-            gasto_total = df_gastos[df_gastos['Nome'] == p]['Custo_Dose'].sum() if not df_gastos.empty else 0.0
-            pago_total = df_pagamentos[df_pagamentos['Nome'] == p]['Valor'].sum() if not df_pagamentos.empty else 0.0
-            saldo = gasto_total - pago_total
+            gasto_total = df_gastos[df_gastos['Nome'] == p]['Custo_Dose'].sum() if (not df_gastos.empty and 'Nome' in df_gastos.columns) else 0.0
+            pago_total = df_pagamentos[df_pagamentos['Nome'] == p]['Valor'].sum() if (not df_pagamentos.empty and 'Nome' in df_pagamentos.columns) else 0.0
             
-            status = "🟢 Quitado" if saldo <= 0 else f"🔴 Deve R$ {saldo:.2f}"
+            saldo = pago_total - gasto_total
+            
+            # Formatação do Saldo e Situação
+            if saldo > 0.01:
+                situacao = "🟢 Tem Crédito"
+                valor_saldo = f"+ R$ {saldo:.2f}"
+            elif saldo < -0.01:
+                situacao = "🔴 Está Devendo"
+                valor_saldo = f"- R$ {abs(saldo):.2f}"
+            else:
+                situacao = "⚪ Quitado"
+                valor_saldo = "R$ 0.00"
             
             balanco.append({
                 "Participante": p,
-                "Consumiu": f"R$ {gasto_total:.2f}",
-                "Pagou": f"R$ {pago_total:.2f}",
-                "Status": status
+                "Total Pago": f"R$ {pago_total:.2f}",
+                "Total Consumido": f"R$ {gasto_total:.2f}",
+                "Saldo": valor_saldo,
+                "Situação": situacao
             })
             
         st.dataframe(pd.DataFrame(balanco), use_container_width=True, hide_index=True)
