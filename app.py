@@ -10,7 +10,7 @@ st.set_page_config(page_title="Controle Mounjaro", page_icon="💧", layout="cen
 # --- ESTILOS CUSTOMIZADOS (CSS) ---
 st.markdown("""
     <style>
-    .stMetric { background-color: #f0f2f6; padding: 10px; border-radius: 10px; }
+    .stMetric { background-color: rgba(128, 128, 128, 0.15); padding: 10px; border-radius: 10px; }
     </style>
 """, unsafe_allow_html=True)
 
