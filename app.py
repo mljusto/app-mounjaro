@@ -53,7 +53,7 @@ def carregar_dados():
         
         return df_frascos, df_aplicacoes, df_participantes, df_pagamentos
     except Exception as e:
-        st.error(f"Erro ao carregar dados. Verifique as abas da planilha. Erro: {e}")
+        st.error(f"Erro ao carregar dados. Verifique se criou a aba Pagamentos. Erro: {e}")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
 df_frascos, df_aplicacoes, df_participantes, df_pagamentos = carregar_dados()
@@ -97,6 +97,7 @@ with tab_dashboard:
                 if not dados_p.empty:
                     ultima_data = dados_p['Data'].max()
                     proxima_data = ultima_data + pd.Timedelta(days=7)
+                    # Só mostra se estiver no futuro ou atrasado até 2 dias
                     if proxima_data >= pd.Timestamp.now() - pd.Timedelta(days=2):
                         proximas.append({"Participante": p, "Próxima Aplicação": proxima_data.strftime("%d/%m/%Y")})
             
@@ -118,3 +119,162 @@ with tab_dashboard:
             fig.update_xaxes(tickformat="%d/%m/%Y", title_text="")
             fig.update_yaxes(title_text="Peso (kg)")
             fig.update_layout(legend=dict(orientation="h", yanchor="bottom", y=-0.3, xanchor="center", x=0.5), margin=dict(l=0, r=0, t=20, b=0))
+            st.plotly_chart(fig, use_container_width=True)
+
+            st.subheader("🏆 Desempenho e Metas")
+            resumo = []
+            for p in df_participantes['Nome'].unique():
+                dados_p = df_completo[df_completo['Nome'] == p].sort_values(by='Data')
+                if not dados_p.empty:
+                    peso_ini = dados_p.iloc[0]['Peso']
+                    peso_atu = dados_p.iloc[-1]['Peso']
+                    meta = dados_p.iloc[-1]['Meta de Peso']
+                    perda = peso_ini - peso_atu
+                    
+                    # Cálculo da barra de progresso (0 a 100)
+                    progresso = 0
+                    if peso_ini > meta:
+                        progresso = int(((peso_ini - peso_atu) / (peso_ini - meta)) * 100)
+                        progresso = max(0, min(100, progresso)) # Trava entre 0 e 100
+                    
+                    resumo.append({
+                        "Nome": p,
+                        "Peso": f"{peso_atu} kg",
+                        "Perdido": f"⬇️ {perda:.1f} kg",
+                        "Progresso Meta": progresso,
+                    })
+            
+            # Usando column_config para desenhar a barra de progresso!
+            st.dataframe(
+                pd.DataFrame(resumo), 
+                use_container_width=True, 
+                hide_index=True,
+                column_config={
+                    "Progresso Meta": st.column_config.ProgressColumn("Progresso (%)", format="%d%%", min_value=0, max_value=100)
+                }
+            )
+
+
+# ==========================================
+# ABA 2: REGISTRAR DOSE (COM AUTO-PREENCHIMENTO)
+# ==========================================
+with tab_registro:
+    st.header("💉 Nova Aplicação")
+    
+    lista_frascos = df_frascos[df_frascos['Status'] == 'Ativo']['ID Frasco'].tolist() if not df_frascos.empty else []
+    lista_participantes = df_participantes['Nome'].tolist() if not df_participantes.empty else []
+    
+    # O seletor de nome FICA FORA do form para o Streamlit poder ler ele na hora
+    nome_selecionado = st.selectbox("1. Selecione o Participante", lista_participantes)
+    
+    # Lógica de auto-preenchimento do peso
+    peso_padrao = 80.0
+    if not df_aplicacoes.empty and nome_selecionado in df_aplicacoes['Nome'].values:
+        ultimo_peso_registrado = df_aplicacoes[df_aplicacoes['Nome'] == nome_selecionado].iloc[-1]['Peso']
+        peso_padrao = float(ultimo_peso_registrado)
+        st.info(f"O último peso de {nome_selecionado} foi {peso_padrao} kg. Atualize se necessário.")
+
+    with st.form("form_nova_dose"):
+        st.markdown("**2. Dados da Aplicação**")
+        data = st.date_input("Data da Aplicação", format="DD/MM/YYYY")
+        frasco_selecionado = st.selectbox("Frasco Utilizado", lista_frascos)
+        
+        c1, c2 = st.columns(2)
+        with c1: dose = st.number_input("Dose (mg)", min_value=2.5, step=2.5)
+        with c2: peso = st.number_input("Peso Atual (kg)", min_value=40.0, step=0.1, value=peso_padrao) # Aqui o peso auto-preenche
+            
+        senha_dose = st.text_input("Senha de Admin", type="password")
+        if st.form_submit_button("Salvar Registro", use_container_width=True):
+            if senha_dose == st.secrets["senha_admin"]:
+                if frasco_selecionado:
+                    conectar_planilha().worksheet("Aplicacoes").append_row([data.strftime("%d/%m/%Y"), nome_selecionado, float(dose), float(peso), frasco_selecionado])
+                    st.success(f"✅ Salvo! {nome_selecionado} tomou {dose}mg. Atualize a página.")
+                else: st.error("❌ Cadastre um frasco ativo primeiro.")
+            else: st.error("❌ Senha incorreta.")
+
+
+# ==========================================
+# ABA 3: FINANÇAS (QUEM DEVE E QUEM PAGOU)
+# ==========================================
+with tab_financas:
+    st.header("💰 Controle Financeiro")
+    
+    if not df_aplicacoes.empty and not df_participantes.empty:
+        # Calcular os gastos totais
+        df_gastos = pd.merge(df_aplicacoes, df_frascos[['ID Frasco', 'Custo_por_MG']], on='ID Frasco', how='left')
+        df_gastos['Custo_Dose'] = df_gastos['Dose'] * df_gastos['Custo_por_MG']
+        
+        balanco = []
+        for p in df_participantes['Nome'].unique():
+            gasto_total = df_gastos[df_gastos['Nome'] == p]['Custo_Dose'].sum() if not df_gastos.empty else 0.0
+            pago_total = df_pagamentos[df_pagamentos['Nome'] == p]['Valor'].sum() if not df_pagamentos.empty else 0.0
+            saldo = gasto_total - pago_total
+            
+            status = "🟢 Quitado" if saldo <= 0 else f"🔴 Deve R$ {saldo:.2f}"
+            
+            balanco.append({
+                "Participante": p,
+                "Consumiu": f"R$ {gasto_total:.2f}",
+                "Pagou": f"R$ {pago_total:.2f}",
+                "Status": status
+            })
+            
+        st.dataframe(pd.DataFrame(balanco), use_container_width=True, hide_index=True)
+    else:
+        st.info("Sem dados suficientes para o balanço financeiro.")
+
+    st.divider()
+    st.subheader("Registrar Pagamento Recebido")
+    with st.form("form_pagamento"):
+        p_nome = st.selectbox("Quem está pagando?", df_participantes['Nome'].tolist() if not df_participantes.empty else [])
+        p_valor = st.number_input("Valor Pago (R$)", min_value=1.0, step=10.0)
+        p_data = st.date_input("Data do Pagamento", format="DD/MM/YYYY")
+        p_senha = st.text_input("Senha", type="password")
+        
+        if st.form_submit_button("Salvar Pagamento", use_container_width=True):
+            if p_senha == st.secrets["senha_admin"]:
+                conectar_planilha().worksheet("Pagamentos").append_row([p_data.strftime("%d/%m/%Y"), p_nome, float(p_valor)])
+                st.success(f"✅ Pagamento de R$ {p_valor} recebido de {p_nome}! Atualize a página.")
+            else: st.error("❌ Senha incorreta.")
+
+# ==========================================
+# ABA 4: AJUSTES E ADMINISTRAÇÃO
+# ==========================================
+with tab_ajustes:
+    st.header("⚙️ Configurações do Sistema")
+    
+    st.subheader("📦 Gestão de Frascos")
+    c_f1, c_f2 = st.columns(2)
+    with c_f1:
+        with st.form("f_add_frasco"):
+            st.markdown("**Cadastrar Novo**")
+            n_id = st.text_input("Lote (Ex: Lote_02)")
+            n_mg = st.number_input("MG Total", value=90.0)
+            n_val = st.number_input("Valor (R$)", value=2750.0)
+            s_add = st.text_input("Senha", type="password")
+            if st.form_submit_button("Cadastrar"):
+                if s_add == st.secrets["senha_admin"]:
+                    conectar_planilha().worksheet("Frascos").append_row([n_id, float(n_mg), float(n_val), "Ativo"])
+                    st.success("✅ Cadastrado!")
+    with c_f2:
+        with st.form("f_ina_frasco"):
+            st.markdown("**Esgotar Atual**")
+            lista_ativos = df_frascos[df_frascos['Status'] == 'Ativo']['ID Frasco'].tolist() if not df_frascos.empty else []
+            f_inativar = st.selectbox("Frasco", lista_ativos)
+            s_ina = st.text_input("Senha", type="password")
+            if st.form_submit_button("Esgotar"):
+                if s_ina == st.secrets["senha_admin"]:
+                    plan = conectar_planilha().worksheet("Frascos")
+                    plan.update_cell(plan.find(f_inativar).row, 4, "Esgotado")
+                    st.success("✅ Esgotado!")
+
+    st.divider()
+    st.subheader("👥 Gestão de Participantes")
+    with st.form("f_add_part"):
+        nome_p = st.text_input("Nome")
+        meta_p = st.number_input("Meta (kg)", min_value=30.0)
+        s_part = st.text_input("Senha", type="password")
+        if st.form_submit_button("Cadastrar Participante"):
+            if s_part == st.secrets["senha_admin"]:
+                conectar_planilha().worksheet("Participantes").append_row([nome_p, float(meta_p)])
+                st.success("✅ Cadastrado!")
