@@ -175,7 +175,13 @@ with tab_registro:
 # ABA 3: CONFIGURAÇÕES
 # ==========================================
 with tab_participantes:
-    st.header("⚙️ Participantes")
+    st.header("⚙️ Ajustes e Administração")
+    
+    # --- NOVO: BOTÃO PARA A PLANILHA ---
+    st.subheader("📂 Banco de Dados")
+    st.markdown("Acesse a planilha base para correções manuais ou auditoria:")
+    st.link_button("📊 Abrir Planilha no Google Sheets", "https://docs.google.com/spreadsheets/d/1OVKS6W9BKXlyQtCrLblPid-87WyBw3lRQPsGWG5-Ka8/edit?usp=sharing", use_container_width=True)
+    st.divider()
     
     with st.form("form_novo_participante"):
         nome_novo = st.text_input("Nome do Participante")
