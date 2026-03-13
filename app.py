@@ -104,25 +104,50 @@ with tab_dashboard:
                         else:
                             st.success(f"✅ Ritmo tranquilo. Remédio garantido até **{data_previsao.strftime('%d/%m/%Y')}**.")
 
-        # CARDS DE PESO (Com Deltas)
+# --- TABELA ÚNICA DE ACOMPANHAMENTO (OTIMIZADA PARA MOBILE) ---
         if not df_aplicacoes.empty and not df_participantes.empty:
             st.subheader("⚖️ Acompanhamento de Peso")
-            colunas_peso = st.columns(len(df_participantes['Nome'].unique()))
             
-            for i, p in enumerate(df_participantes['Nome'].unique()):
-                dados_p = df_aplicacoes[df_aplicacoes['Nome'] == p].sort_values(by='Data')
+            df_completo = pd.merge(df_aplicacoes, df_participantes, on='Nome', how='left')
+            resumo = []
+            
+            for p in df_participantes['Nome'].unique():
+                dados_p = df_completo[df_completo['Nome'] == p].sort_values(by='Data')
                 if not dados_p.empty:
-                    peso_atual = dados_p.iloc[-1]['Peso']
+                    peso_ini = dados_p.iloc[0]['Peso']
+                    peso_atu = dados_p.iloc[-1]['Peso']
+                    meta = dados_p.iloc[-1]['Meta de Peso']
+                    perda_total = peso_ini - peso_atu
+                    progresso = max(0, min(100, int(((peso_ini - peso_atu) / (peso_ini - meta)) * 100))) if peso_ini > meta else 0
                     
-                    # Calcula o delta (comparando com a penúltima medição, se houver)
-                    delta_str = None
+                    # Calcula o ganho/perda da última semana (Delta)
+                    delta_str = ""
                     if len(dados_p) > 1:
                         peso_anterior = dados_p.iloc[-2]['Peso']
-                        delta_valor = peso_atual - peso_anterior
-                        delta_str = f"{delta_valor:.1f} kg (última semana)"
+                        delta_semana = peso_atu - peso_anterior
+                        if delta_semana > 0:
+                            delta_str = f" (+{delta_semana:.1f})"
+                        elif delta_semana < 0:
+                            delta_str = f" ({delta_semana:.1f})"
+                        else:
+                            delta_str = " (=)"
                     
-                    with colunas_peso[i % len(colunas_peso)]:
-                        st.metric(label=p, value=f"{peso_atual} kg", delta=delta_str, delta_color="inverse")
+                    resumo.append({
+                        "Nome": p, 
+                        "Peso Atual": f"{peso_atu:.1f} kg{delta_str}",
+                        "Perdido Total": f"⬇️ {perda_total:.1f} kg", 
+                        "Progresso Meta": progresso
+                    })
+            
+            # Exibe a tabela otimizada
+            st.dataframe(
+                pd.DataFrame(resumo), 
+                use_container_width=True, 
+                hide_index=True,
+                column_config={
+                    "Progresso Meta": st.column_config.ProgressColumn("Avanço", format="%d%%", min_value=0, max_value=100)
+                }
+            )
 
             # TABELA DE DESEMPENHO E METAS
             df_completo = pd.merge(df_aplicacoes, df_participantes, on='Nome', how='left')
