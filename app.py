@@ -104,7 +104,7 @@ with tab_dashboard:
                         else:
                             st.success(f"✅ Ritmo tranquilo. Remédio garantido até **{data_previsao.strftime('%d/%m/%Y')}**.")
 
-# --- TABELA ÚNICA DE ACOMPANHAMENTO (OTIMIZADA PARA MOBILE) ---
+        # --- TABELA ÚNICA DE ACOMPANHAMENTO (OTIMIZADA PARA MOBILE) ---
         if not df_aplicacoes.empty and not df_participantes.empty:
             st.subheader("⚖️ Acompanhamento de Peso")
             
@@ -145,26 +145,9 @@ with tab_dashboard:
                 use_container_width=True, 
                 hide_index=True,
                 column_config={
-                    "Progresso Meta": st.column_config.ProgressColumn("Avanço", format="%d%%", min_value=0, max_value=100)
+                    "Progresso Meta": st.column_config.ProgressColumn("Avanço p/ Meta", format="%d%%", min_value=0, max_value=100)
                 }
             )
-
-            # TABELA DE DESEMPENHO E METAS
-            df_completo = pd.merge(df_aplicacoes, df_participantes, on='Nome', how='left')
-            resumo = []
-            for p in df_participantes['Nome'].unique():
-                dados_p = df_completo[df_completo['Nome'] == p].sort_values(by='Data')
-                if not dados_p.empty:
-                    peso_ini = dados_p.iloc[0]['Peso']
-                    peso_atu = dados_p.iloc[-1]['Peso']
-                    meta = dados_p.iloc[-1]['Meta de Peso']
-                    perda = peso_ini - peso_atu
-                    progresso = max(0, min(100, int(((peso_ini - peso_atu) / (peso_ini - meta)) * 100))) if peso_ini > meta else 0
-                    
-                    resumo.append({"Nome": p, "Perdido Total": f"⬇️ {perda:.1f} kg", "Progresso Meta": progresso})
-            
-            st.dataframe(pd.DataFrame(resumo), use_container_width=True, hide_index=True,
-                         column_config={"Progresso Meta": st.column_config.ProgressColumn("Avanço p/ Meta", format="%d%%", min_value=0, max_value=100)})
 
 # ==========================================
 # ABA 2: REGISTRAR DOSE E SINTOMAS
