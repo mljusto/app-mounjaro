@@ -79,6 +79,11 @@ with tab_dashboard:
                 c2.metric("Disponível", f"{mg_restante} mg")
                 c3.metric("Custo / MG", f"R$ {frasco_atual['Custo_por_MG']:.2f}")
                 
+                # --- BARRA DE PROGRESSO VISUAL ---
+                if frasco_atual['MG Total'] > 0:
+                    percentual = max(0, min(100, int((mg_restante / frasco_atual['MG Total']) * 100)))
+                    st.progress(percentual, text=f"Volume Restante: {percentual}%")
+                
                 # Alerta de Compra Dinâmico
                 if not df_aplicacoes.empty and not df_participantes.empty:
                     gasto_semanal_estimado = 0
@@ -91,6 +96,7 @@ with tab_dashboard:
                         dias_restantes = int((mg_restante / gasto_semanal_estimado) * 7)
                         data_previsao = pd.Timestamp.now() + pd.Timedelta(days=dias_restantes)
                         
+                        st.markdown("<br>", unsafe_allow_html=True) # Espaçinho extra
                         if dias_restantes <= 14:
                             st.error(f"🚨 **URGENTE:** Estoque acaba em aprox. **{data_previsao.strftime('%d/%m')}** ({dias_restantes} dias).")
                         elif dias_restantes <= 28:
