@@ -58,6 +58,8 @@ def carregar_dados():
         st.error(f"Erro ao carregar dados. Verifique as abas da planilha. Erro: {e}")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
 
+df_frascos, df_aplicacoes, df_participantes, df_pagamentos = carregar_dados()
+
 # --- CABEÇALHO DO APP ---
 st.markdown("<h1 style='text-align: center; color: #1f77b4;'>💧 Mounjaro App</h1>", unsafe_allow_html=True)
 st.divider()
