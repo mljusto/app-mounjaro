@@ -45,18 +45,18 @@ def carregar_dados():
         
         if not df_aplicacoes.empty:
             df_aplicacoes['Data'] = pd.to_datetime(df_aplicacoes['Data'], format="%d/%m/%Y")
-            df_aplicacoes['Dose'] = df_aplicacoes['Dose'].astype(str).str.replace(',', '.').astype(float)
-            df_aplicacoes['Peso'] = df_aplicacoes['Peso'].astype(str).str.replace(',', '.').astype(float)
+            
+            # BLINDAGEM ANTI-ERRO (Converte vírgula, ignora texto e arruma células vazias)
+            df_aplicacoes['Dose'] = pd.to_numeric(df_aplicacoes['Dose'].astype(str).str.replace(',', '.'), errors='coerce').fillna(0)
+            df_aplicacoes['Peso'] = pd.to_numeric(df_aplicacoes['Peso'].astype(str).str.replace(',', '.'), errors='coerce').fillna(0)
             
         if not df_pagamentos.empty:
-            df_pagamentos['Valor'] = df_pagamentos['Valor'].astype(str).str.replace(',', '.').astype(float)
+            df_pagamentos['Valor'] = pd.to_numeric(df_pagamentos['Valor'].astype(str).str.replace(',', '.'), errors='coerce').fillna(0)
         
         return df_frascos, df_aplicacoes, df_participantes, df_pagamentos
     except Exception as e:
         st.error(f"Erro ao carregar dados. Verifique as abas da planilha. Erro: {e}")
         return pd.DataFrame(), pd.DataFrame(), pd.DataFrame(), pd.DataFrame()
-
-df_frascos, df_aplicacoes, df_participantes, df_pagamentos = carregar_dados()
 
 # --- CABEÇALHO DO APP ---
 st.markdown("<h1 style='text-align: center; color: #1f77b4;'>💧 Mounjaro App</h1>", unsafe_allow_html=True)
