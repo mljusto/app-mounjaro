@@ -88,6 +88,29 @@ with tab_dashboard:
             c3.metric("💸 Custo / MG", f"R$ {frasco_atual['Custo_por_MG']:.2f}")
             if mg_restante <= 10: st.error("⚠️ Atenção: O frasco está no fim!")
             
+            # --- ALERTA DE COMPRA E PREVISÃO DE TÉRMINO ---
+            if not df_aplicacoes.empty and not df_participantes.empty:
+                gasto_semanal_estimado = 0
+                for p in df_participantes['Nome'].unique():
+                    dados_p = df_aplicacoes[df_aplicacoes['Nome'] == p]
+                    if not dados_p.empty:
+                        ultima_dose_p = dados_p.iloc[-1]['Dose']
+                        gasto_semanal_estimado += ultima_dose_p
+                
+                if gasto_semanal_estimado > 0:
+                    semanas_restantes = mg_restante / gasto_semanal_estimado
+                    dias_restantes = int(semanas_restantes * 7)
+                    data_previsao = pd.Timestamp.now() + pd.Timedelta(days=dias_restantes)
+                    
+                    st.markdown("### 🛒 Alerta de Estoque")
+                    
+                    if dias_restantes <= 14:
+                        st.error(f"🚨 **URGENTE:** O frasco deve acabar por volta de **{data_previsao.strftime('%d/%m/%Y')}** (em aprox. {dias_restantes} dias). Considere comprar um novo frasco agora!")
+                    elif dias_restantes <= 28:
+                        st.warning(f"⚠️ **Atenção:** O frasco tem previsão para durar até **{data_previsao.strftime('%d/%m/%Y')}**. Fique de olho nos preços e promoções.")
+                    else:
+                        st.success(f"Tranquilo! No ritmo atual de {gasto_semanal_estimado}mg/semana, o frasco dura até aprox. **{data_previsao.strftime('%d/%m/%Y')}**.")
+            
         st.divider()
 
         # --- PRÓXIMAS APLICAÇÕES (LEMBRETE) ---
@@ -153,9 +176,8 @@ with tab_dashboard:
                 }
             )
 
-
 # ==========================================
-# ABA 2: REGISTRAR DOSE
+# ABA 2: REGISTRAR DOSE E SINTOMAS
 # ==========================================
 with tab_registro:
     st.header("💉 Nova Aplicação")
@@ -179,16 +201,29 @@ with tab_registro:
         c1, c2 = st.columns(2)
         with c1: dose = st.number_input("Dose (mg)", min_value=2.5, step=2.5)
         with c2: peso = st.number_input("Peso Atual (kg)", min_value=40.0, step=0.1, value=peso_padrao)
+        
+        st.markdown("**3. Acompanhamento**")
+        opcoes_sintomas = ["Nenhum", "Saciedade alta", "Enjoo", "Fadiga", "Dor de cabeça", "Constipação", "Azia"]
+        sintomas = st.multiselect("Sintomas sentidos na última semana", opcoes_sintomas)
+        observacoes = st.text_input("Alguma observação extra? (Opcional)")
             
         senha_dose = st.text_input("Senha de Admin", type="password")
         if st.form_submit_button("Salvar Registro", use_container_width=True):
             if senha_dose == st.secrets["senha_admin"]:
                 if frasco_selecionado:
-                    conectar_planilha().worksheet("Aplicacoes").append_row([data.strftime("%d/%m/%Y"), nome_selecionado, float(dose), float(peso), frasco_selecionado])
+                    sintomas_str = ", ".join(sintomas) if sintomas else "Não informado"
+                    conectar_planilha().worksheet("Aplicacoes").append_row([
+                        data.strftime("%d/%m/%Y"), 
+                        nome_selecionado, 
+                        float(dose), 
+                        float(peso), 
+                        frasco_selecionado,
+                        sintomas_str,
+                        observacoes
+                    ])
                     st.success(f"✅ Salvo! {nome_selecionado} tomou {dose}mg. Atualize a página.")
                 else: st.error("❌ Cadastre um frasco ativo primeiro.")
             else: st.error("❌ Senha incorreta.")
-
 
 # ==========================================
 # ABA 3: FINANÇAS (CÁLCULO DE SALDO)
@@ -207,7 +242,6 @@ with tab_financas:
             
             saldo = pago_total - gasto_total
             
-            # Formatação DIRETA do Saldo na mesma coluna da situação
             if saldo > 0.01:
                 texto_saldo = f"🟢 Crédito: R$ {saldo:.2f}"
             elif saldo < -0.01:
