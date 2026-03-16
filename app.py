@@ -66,7 +66,6 @@ with tab_dashboard:
         df_frascos['Custo_por_MG'] = df_frascos['Valor Pago'] / df_frascos['MG Total']
         frascos_ativos = df_frascos[df_frascos['Status'] == 'Ativo']
         
-        # CARD DO FRASCO ATUAL
         with st.container(border=True):
             st.subheader("📦 Status do Frasco")
             if not frascos_ativos.empty:
@@ -79,12 +78,10 @@ with tab_dashboard:
                 c2.metric("Disponível", f"{mg_restante} mg")
                 c3.metric("Custo / MG", f"R$ {frasco_atual['Custo_por_MG']:.2f}")
                 
-                # --- BARRA DE PROGRESSO VISUAL ---
                 if frasco_atual['MG Total'] > 0:
                     percentual = max(0, min(100, int((mg_restante / frasco_atual['MG Total']) * 100)))
                     st.progress(percentual, text=f"Volume Restante: {percentual}%")
                 
-                # Alerta de Compra Dinâmico
                 if not df_aplicacoes.empty and not df_participantes.empty:
                     gasto_semanal_estimado = 0
                     for p in df_participantes['Nome'].unique():
@@ -104,7 +101,6 @@ with tab_dashboard:
                         else:
                             st.success(f"✅ Ritmo tranquilo. Remédio garantido até **{data_previsao.strftime('%d/%m/%Y')}**.")
 
-        # --- TABELA ÚNICA DE ACOMPANHAMENTO (OTIMIZADA PARA MOBILE) ---
         if not df_aplicacoes.empty and not df_participantes.empty:
             st.subheader("⚖️ Acompanhamento de Peso")
             
@@ -174,14 +170,11 @@ with tab_registro:
                     if frasco_selecionado:
                         sintomas_str = ", ".join(sintomas) if sintomas else "Não informado"
                         
-                        # TRADUÇÃO PARA O GOOGLE SHEETS BRASILEIRO
-                        dose_br = str(dose).replace(".", ",")
-                        peso_br = str(peso).replace(".", ",")
-                        
+                        # FORÇA SALVAR COMO TEXTO COM PONTO (RAW) PARA BATER COM OS DADOS ANTIGOS
                         conectar_planilha().worksheet("Aplicacoes").append_row([
-                            data.strftime("%d/%m/%Y"), nome_selecionado, dose_br, peso_br, 
+                            data.strftime("%d/%m/%Y"), nome_selecionado, str(dose), str(peso), 
                             frasco_selecionado, sintomas_str, observacoes
-                        ], value_input_option="USER_ENTERED") # O USER_ENTERED força a planilha a ler como número
+                        ], value_input_option="RAW")
                         
                         st.toast(f"✅ Aplicação de {nome_selecionado} salva com sucesso!")
                     else: st.error("❌ Cadastre um frasco ativo primeiro.")
@@ -220,12 +213,9 @@ with tab_financas:
             
             if st.form_submit_button("Salvar Pagamento"):
                 if p_senha == st.secrets["senha_admin"]:
-                    # TRADUÇÃO PARA O GOOGLE SHEETS BRASILEIRO
-                    valor_br = str(p_valor).replace(".", ",")
                     conectar_planilha().worksheet("Pagamentos").append_row([
-                        p_data.strftime("%d/%m/%Y"), p_nome, valor_br
-                    ], value_input_option="USER_ENTERED")
-                    
+                        p_data.strftime("%d/%m/%Y"), p_nome, str(p_valor)
+                    ], value_input_option="RAW")
                     st.toast(f"✅ Pagamento de R$ {p_valor} recebido!")
                 else: st.error("❌ Senha incorreta.")
 
@@ -244,14 +234,9 @@ with tab_ajustes:
             s_add = st.text_input("Senha", type="password")
             if st.form_submit_button("Salvar Frasco"):
                 if s_add == st.secrets["senha_admin"]:
-                    # TRADUÇÃO PARA O GOOGLE SHEETS BRASILEIRO
-                    mg_br = str(n_mg).replace(".", ",")
-                    val_br = str(n_val).replace(".", ",")
-                    
                     conectar_planilha().worksheet("Frascos").append_row([
-                        n_id, mg_br, val_br, "Ativo"
-                    ], value_input_option="USER_ENTERED")
-                    
+                        n_id, str(n_mg), str(n_val), "Ativo"
+                    ], value_input_option="RAW")
                     st.toast("✅ Frasco cadastrado com sucesso!")
 
     with st.expander("🗑️ Esgotar Frasco Atual"):
@@ -272,10 +257,7 @@ with tab_ajustes:
             s_part = st.text_input("Senha Admin", type="password")
             if st.form_submit_button("Salvar Participante"):
                 if s_part == st.secrets["senha_admin"]:
-                    # TRADUÇÃO PARA O GOOGLE SHEETS BRASILEIRO
-                    meta_br = str(meta_p).replace(".", ",")
                     conectar_planilha().worksheet("Participantes").append_row([
-                        nome_p, meta_br
-                    ], value_input_option="USER_ENTERED")
-                    
+                        nome_p, str(meta_p)
+                    ], value_input_option="RAW")
                     st.toast(f"✅ Participante {nome_p} adicionado!")
