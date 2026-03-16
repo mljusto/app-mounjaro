@@ -96,7 +96,7 @@ with tab_dashboard:
                         dias_restantes = int((mg_restante / gasto_semanal_estimado) * 7)
                         data_previsao = pd.Timestamp.now() + pd.Timedelta(days=dias_restantes)
                         
-                        st.markdown("<br>", unsafe_allow_html=True) # Espaçinho extra
+                        st.markdown("<br>", unsafe_allow_html=True)
                         if dias_restantes <= 14:
                             st.error(f"🚨 **URGENTE:** Estoque acaba em aprox. **{data_previsao.strftime('%d/%m')}** ({dias_restantes} dias).")
                         elif dias_restantes <= 28:
@@ -120,17 +120,13 @@ with tab_dashboard:
                     perda_total = peso_ini - peso_atu
                     progresso = max(0, min(100, int(((peso_ini - peso_atu) / (peso_ini - meta)) * 100))) if peso_ini > meta else 0
                     
-                    # Calcula o ganho/perda da última semana (Delta)
                     delta_str = ""
                     if len(dados_p) > 1:
                         peso_anterior = dados_p.iloc[-2]['Peso']
                         delta_semana = peso_atu - peso_anterior
-                        if delta_semana > 0:
-                            delta_str = f" (+{delta_semana:.1f})"
-                        elif delta_semana < 0:
-                            delta_str = f" ({delta_semana:.1f})"
-                        else:
-                            delta_str = " (=)"
+                        if delta_semana > 0: delta_str = f" (+{delta_semana:.1f})"
+                        elif delta_semana < 0: delta_str = f" ({delta_semana:.1f})"
+                        else: delta_str = " (=)"
                     
                     resumo.append({
                         "Nome": p, 
@@ -139,15 +135,8 @@ with tab_dashboard:
                         "Progresso Meta": progresso
                     })
             
-            # Exibe a tabela otimizada
-            st.dataframe(
-                pd.DataFrame(resumo), 
-                use_container_width=True, 
-                hide_index=True,
-                column_config={
-                    "Progresso Meta": st.column_config.ProgressColumn("Avanço p/ Meta", format="%d%%", min_value=0, max_value=100)
-                }
-            )
+            st.dataframe(pd.DataFrame(resumo), use_container_width=True, hide_index=True,
+                         column_config={"Progresso Meta": st.column_config.ProgressColumn("Avanço p/ Meta", format="%d%%", min_value=0, max_value=100)})
 
 # ==========================================
 # ABA 2: REGISTRAR DOSE E SINTOMAS
@@ -184,10 +173,16 @@ with tab_registro:
                 if senha_dose == st.secrets["senha_admin"]:
                     if frasco_selecionado:
                         sintomas_str = ", ".join(sintomas) if sintomas else "Não informado"
+                        
+                        # TRADUÇÃO PARA O GOOGLE SHEETS BRASILEIRO
+                        dose_br = str(dose).replace(".", ",")
+                        peso_br = str(peso).replace(".", ",")
+                        
                         conectar_planilha().worksheet("Aplicacoes").append_row([
-                            data.strftime("%d/%m/%Y"), nome_selecionado, float(dose), float(peso), 
+                            data.strftime("%d/%m/%Y"), nome_selecionado, dose_br, peso_br, 
                             frasco_selecionado, sintomas_str, observacoes
-                        ])
+                        ], value_input_option="USER_ENTERED") # O USER_ENTERED força a planilha a ler como número
+                        
                         st.toast(f"✅ Aplicação de {nome_selecionado} salva com sucesso!")
                     else: st.error("❌ Cadastre um frasco ativo primeiro.")
                 else: st.error("❌ Senha incorreta.")
@@ -216,7 +211,6 @@ with tab_financas:
             
         st.dataframe(pd.DataFrame(balanco), use_container_width=True, hide_index=True)
 
-    # GAVETA DE PAGAMENTO
     with st.expander("💳 Registrar Novo Pagamento"):
         with st.form("form_pagamento", clear_on_submit=True):
             p_nome = st.selectbox("Quem está pagando?", df_participantes['Nome'].tolist() if not df_participantes.empty else [])
@@ -226,7 +220,12 @@ with tab_financas:
             
             if st.form_submit_button("Salvar Pagamento"):
                 if p_senha == st.secrets["senha_admin"]:
-                    conectar_planilha().worksheet("Pagamentos").append_row([p_data.strftime("%d/%m/%Y"), p_nome, float(p_valor)])
+                    # TRADUÇÃO PARA O GOOGLE SHEETS BRASILEIRO
+                    valor_br = str(p_valor).replace(".", ",")
+                    conectar_planilha().worksheet("Pagamentos").append_row([
+                        p_data.strftime("%d/%m/%Y"), p_nome, valor_br
+                    ], value_input_option="USER_ENTERED")
+                    
                     st.toast(f"✅ Pagamento de R$ {p_valor} recebido!")
                 else: st.error("❌ Senha incorreta.")
 
@@ -236,7 +235,6 @@ with tab_financas:
 with tab_ajustes:
     st.header("⚙️ Configurações")
     
-    # GAVETA: NOVO FRASCO
     with st.expander("📦 Cadastrar Novo Frasco"):
         with st.form("f_add_frasco", clear_on_submit=True):
             n_id = st.text_input("Nome/Lote (Ex: Lote_02)")
@@ -246,10 +244,16 @@ with tab_ajustes:
             s_add = st.text_input("Senha", type="password")
             if st.form_submit_button("Salvar Frasco"):
                 if s_add == st.secrets["senha_admin"]:
-                    conectar_planilha().worksheet("Frascos").append_row([n_id, float(n_mg), float(n_val), "Ativo"])
+                    # TRADUÇÃO PARA O GOOGLE SHEETS BRASILEIRO
+                    mg_br = str(n_mg).replace(".", ",")
+                    val_br = str(n_val).replace(".", ",")
+                    
+                    conectar_planilha().worksheet("Frascos").append_row([
+                        n_id, mg_br, val_br, "Ativo"
+                    ], value_input_option="USER_ENTERED")
+                    
                     st.toast("✅ Frasco cadastrado com sucesso!")
 
-    # GAVETA: ESGOTAR FRASCO
     with st.expander("🗑️ Esgotar Frasco Atual"):
         with st.form("f_ina_frasco", clear_on_submit=True):
             lista_ativos = df_frascos[df_frascos['Status'] == 'Ativo']['ID Frasco'].tolist() if not df_frascos.empty else []
@@ -261,7 +265,6 @@ with tab_ajustes:
                     plan.update_cell(plan.find(f_inativar).row, 4, "Esgotado")
                     st.toast(f"✅ Frasco {f_inativar} esgotado!")
 
-    # GAVETA: NOVO PARTICIPANTE
     with st.expander("👥 Cadastrar Participante"):
         with st.form("f_add_part", clear_on_submit=True):
             nome_p = st.text_input("Nome")
@@ -269,5 +272,10 @@ with tab_ajustes:
             s_part = st.text_input("Senha Admin", type="password")
             if st.form_submit_button("Salvar Participante"):
                 if s_part == st.secrets["senha_admin"]:
-                    conectar_planilha().worksheet("Participantes").append_row([nome_p, float(meta_p)])
+                    # TRADUÇÃO PARA O GOOGLE SHEETS BRASILEIRO
+                    meta_br = str(meta_p).replace(".", ",")
+                    conectar_planilha().worksheet("Participantes").append_row([
+                        nome_p, meta_br
+                    ], value_input_option="USER_ENTERED")
+                    
                     st.toast(f"✅ Participante {nome_p} adicionado!")
