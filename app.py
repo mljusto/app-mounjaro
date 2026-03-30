@@ -153,10 +153,24 @@ with tab_individual:
             perda_total = peso_inicial - peso_atual
             ultima_dose = dados_p.iloc[-1]['Dose']
             
+            # Descobre a perda da última semana e a dose que causou ela
+            perda_semana_str = "N/A"
+            semana_passada_dose = "N/A"
+            if len(dados_p) > 1:
+                peso_anterior = dados_p.iloc[-2]['Peso']
+                perda_semana = peso_anterior - peso_atual
+                semana_passada_dose = dados_p.iloc[-2]['Dose']
+                if perda_semana > 0:
+                    perda_semana_str = f"⬇️ {perda_semana:.1f} kg (Efeito dos {semana_passada_dose}mg)"
+                elif perda_semana < 0:
+                    perda_semana_str = f"⬆️ {abs(perda_semana):.1f} kg (Efeito dos {semana_passada_dose}mg)"
+                else:
+                    perda_semana_str = f"= Manteve (Efeito dos {semana_passada_dose}mg)"
+
             c1, c2, c3 = st.columns(3)
             c1.metric("Peso Atual", f"{peso_atual:.1f} kg", f"{-perda_total:.1f} kg (Total)", delta_color="inverse")
-            c2.metric("Dose Atual", f"{ultima_dose} mg")
-            c3.metric("Aplicações", f"{len(dados_p)} doses")
+            c2.metric("Resultado da Última Dose", perda_semana_str)
+            c3.metric("Nova Dose Aplicada", f"{ultima_dose} mg")
             
             st.markdown("---")
             
@@ -184,31 +198,34 @@ with tab_individual:
             )
             st.plotly_chart(fig, use_container_width=True)
             
-            # Diário de Bordo com Cálculo de Variação
+            # Diário de Bordo com Efeito da Dose Anterior
             st.subheader("Diário de Bordo")
             historico_tabela = dados_p[['Data', 'Dose', 'Peso', 'Sintomas', 'Observacoes']].copy()
             historico_tabela['Data'] = historico_tabela['Data'].dt.strftime("%d/%m/%Y")
             
+            # Cruza a variação de peso com a dose da linha de cima (shift)
             historico_tabela['Variacao'] = historico_tabela['Peso'].diff()
+            historico_tabela['Dose_Anterior'] = historico_tabela['Dose'].shift(1)
             
             peso_formatado = []
             for index, row in historico_tabela.iterrows():
                 p_atual = row['Peso']
                 var = row['Variacao']
+                d_ant = row['Dose_Anterior']
                 
                 if pd.isna(var):
                     txt_peso = f"{p_atual:.1f} kg"
-                elif var < 0:
-                    txt_peso = f"{p_atual:.1f} kg (⬇️ {abs(var):.1f} kg)"
-                elif var > 0:
-                    txt_peso = f"{p_atual:.1f} kg (⬆️ {var:.1f} kg)"
                 else:
-                    txt_peso = f"{p_atual:.1f} kg (=)"
+                    sinal = "⬇️" if var < 0 else "⬆️" if var > 0 else "="
+                    if pd.notna(d_ant):
+                        txt_peso = f"{p_atual:.1f} kg ({sinal} {abs(var):.1f} kg com {d_ant}mg)"
+                    else:
+                        txt_peso = f"{p_atual:.1f} kg ({sinal} {abs(var):.1f} kg)"
                 
                 peso_formatado.append(txt_peso)
                 
             historico_tabela['Peso'] = peso_formatado
-            historico_tabela = historico_tabela.drop(columns=['Variacao'])
+            historico_tabela = historico_tabela.drop(columns=['Variacao', 'Dose_Anterior'])
             
             st.dataframe(historico_tabela, use_container_width=True, hide_index=True)
             
@@ -216,7 +233,7 @@ with tab_individual:
             st.info(f"Ainda não há aplicações registradas para {participante_sel}.")
     else:
         st.info("Cadastre participantes e adicione aplicações para ver o histórico individual.")
-
+        
 # ==========================================
 # ABA 3: REGISTRAR DOSE E SINTOMAS
 # ==========================================
