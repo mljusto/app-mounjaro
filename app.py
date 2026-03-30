@@ -3,6 +3,7 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 import plotly.express as px
+import plotly.graph_objects as go  # <-- NOVO IMPORT PARA O GRÁFICO DUPLO
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Controle Mounjaro", page_icon="💧", layout="centered")
@@ -53,11 +54,11 @@ df_frascos, df_aplicacoes, df_participantes, df_pagamentos = carregar_dados()
 # --- CABEÇALHO DO APP ---
 st.markdown("<h1 style='text-align: center; color: #1f77b4;'>💧 Mounjaro App</h1>", unsafe_allow_html=True)
 
-# --- ABAS DO APLICATIVO ---
-tab_dashboard, tab_registro, tab_financas, tab_ajustes = st.tabs(["📊 Resultados", "📝 Nova Dose", "💰 Finanças", "⚙️ Ajustes"])
+# --- ABAS DO APLICATIVO (AGORA COM 5 ABAS) ---
+tab_dashboard, tab_individual, tab_registro, tab_financas, tab_ajustes = st.tabs(["📊 Visão Geral", "👤 Individual", "📝 Nova Dose", "💰 Finanças", "⚙️ Ajustes"])
 
 # ==========================================
-# ABA 1: PAINEL DE RESULTADOS
+# ABA 1: PAINEL DE RESULTADOS GERAIS
 # ==========================================
 with tab_dashboard:
     if df_frascos.empty:
@@ -134,8 +135,78 @@ with tab_dashboard:
             st.dataframe(pd.DataFrame(resumo), use_container_width=True, hide_index=True,
                          column_config={"Progresso Meta": st.column_config.ProgressColumn("Avanço p/ Meta", format="%d%%", min_value=0, max_value=100)})
 
+
 # ==========================================
-# ABA 2: REGISTRAR DOSE E SINTOMAS
+# ABA 2: ACOMPANHAMENTO INDIVIDUAL (NOVO)
+# ==========================================
+with tab_individual:
+    st.header("👤 Histórico e Evolução")
+    
+    if not df_aplicacoes.empty and not df_participantes.empty:
+        lista_participantes = df_participantes['Nome'].tolist()
+        participante_sel = st.selectbox("Selecione o Participante", lista_participantes, key="sel_part_ind")
+        
+        dados_p = df_aplicacoes[df_aplicacoes['Nome'] == participante_sel].sort_values('Data')
+        
+        if not dados_p.empty:
+            # Métricas Rápidas do Participante
+            peso_atual = dados_p.iloc[-1]['Peso']
+            peso_inicial = dados_p.iloc[0]['Peso']
+            perda_total = peso_inicial - peso_atual
+            ultima_dose = dados_p.iloc[-1]['Dose']
+            
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Peso Atual", f"{peso_atual:.1f} kg", f"{-perda_total:.1f} kg (Total)", delta_color="inverse")
+            c2.metric("Dose Atual", f"{ultima_dose} mg")
+            c3.metric("Aplicações", f"{len(dados_p)} doses")
+            
+            st.markdown("---")
+            
+            # Gráfico de Duplo Eixo: Peso (Linha) x Dose (Barras)
+            fig = go.Figure()
+            
+            # Eixo Y1 - Linha do Peso
+            fig.add_trace(go.Scatter(
+                x=dados_p['Data'], y=dados_p['Peso'],
+                name="Peso (kg)", mode="lines+markers",
+                line=dict(color="#1f77b4", width=3),
+                marker=dict(size=8)
+            ))
+            
+            # Eixo Y2 - Barras da Dose
+            fig.add_trace(go.Bar(
+                x=dados_p['Data'], y=dados_p['Dose'],
+                name="Dose (mg)",
+                marker_color="rgba(44, 160, 44, 0.4)", # Um verde transparente para não ofuscar o peso
+                yaxis="y2"
+            ))
+            
+            # Configuração dos dois eixos para ficarem bonitos no celular
+            fig.update_layout(
+                title=f"Evolução de {participante_sel}",
+                xaxis=dict(title="", tickformat="%d/%m/%Y"),
+                yaxis=dict(title="Peso (kg)", side="left"),
+                yaxis2=dict(title="Dose (mg)", side="right", overlaying="y", showgrid=False, range=[0, 15]), # Range fixo da dose pra ficar na base
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+                margin=dict(l=0, r=0, t=50, b=0)
+            )
+            
+            st.plotly_chart(fig, use_container_width=True)
+            
+            # Tabela de Diário de Bordo
+            st.subheader("Diário de Bordo")
+            historico_tabela = dados_p[['Data', 'Dose', 'Peso', 'Sintomas', 'Observacoes']].copy()
+            historico_tabela['Data'] = historico_tabela['Data'].dt.strftime("%d/%m/%Y")
+            st.dataframe(historico_tabela, use_container_width=True, hide_index=True)
+            
+        else:
+            st.info(f"Ainda não há aplicações registradas para {participante_sel}.")
+    else:
+        st.info("Cadastre participantes e adicione aplicações para ver o histórico individual.")
+
+
+# ==========================================
+# ABA 3: REGISTRAR DOSE E SINTOMAS
 # ==========================================
 with tab_registro:
     st.header("💉 Nova Aplicação")
@@ -170,7 +241,6 @@ with tab_registro:
                     if frasco_selecionado:
                         sintomas_str = ", ".join(sintomas) if sintomas else "Não informado"
                         
-                        # FORÇA SALVAR COMO TEXTO COM PONTO (RAW) PARA BATER COM OS DADOS ANTIGOS
                         conectar_planilha().worksheet("Aplicacoes").append_row([
                             data.strftime("%d/%m/%Y"), nome_selecionado, str(dose), str(peso), 
                             frasco_selecionado, sintomas_str, observacoes
@@ -180,8 +250,9 @@ with tab_registro:
                     else: st.error("❌ Cadastre um frasco ativo primeiro.")
                 else: st.error("❌ Senha incorreta.")
 
+
 # ==========================================
-# ABA 3: FINANÇAS
+# ABA 4: FINANÇAS
 # ==========================================
 with tab_financas:
     st.header("💰 Controle Financeiro")
@@ -219,8 +290,9 @@ with tab_financas:
                     st.toast(f"✅ Pagamento de R$ {p_valor} recebido!")
                 else: st.error("❌ Senha incorreta.")
 
+
 # ==========================================
-# ABA 4: AJUSTES
+# ABA 5: AJUSTES
 # ==========================================
 with tab_ajustes:
     st.header("⚙️ Configurações")
