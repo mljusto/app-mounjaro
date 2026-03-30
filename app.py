@@ -3,7 +3,7 @@ import pandas as pd
 import gspread
 from google.oauth2.service_account import Credentials
 import plotly.express as px
-import plotly.graph_objects as go  # <-- NOVO IMPORT PARA O GRÁFICO DUPLO
+import plotly.graph_objects as go
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
 st.set_page_config(page_title="Controle Mounjaro", page_icon="💧", layout="centered")
@@ -54,7 +54,7 @@ df_frascos, df_aplicacoes, df_participantes, df_pagamentos = carregar_dados()
 # --- CABEÇALHO DO APP ---
 st.markdown("<h1 style='text-align: center; color: #1f77b4;'>💧 Mounjaro App</h1>", unsafe_allow_html=True)
 
-# --- ABAS DO APLICATIVO (AGORA COM 5 ABAS) ---
+# --- ABAS DO APLICATIVO ---
 tab_dashboard, tab_individual, tab_registro, tab_financas, tab_ajustes = st.tabs(["📊 Visão Geral", "👤 Individual", "📝 Nova Dose", "💰 Finanças", "⚙️ Ajustes"])
 
 # ==========================================
@@ -133,11 +133,10 @@ with tab_dashboard:
                     })
             
             st.dataframe(pd.DataFrame(resumo), use_container_width=True, hide_index=True,
-                         column_config={"Progresso Meta": st.column_config.ProgressColumn("Avanço p/ Meta", format="%d%%", min_value=0, max_value=100)})
-
+                         column_config={"Progresso Meta": st.column_config.ProgressColumn("Avanço", format="%d%%", min_value=0, max_value=100)})
 
 # ==========================================
-# ABA 2: ACOMPANHAMENTO INDIVIDUAL (NOVO)
+# ABA 2: ACOMPANHAMENTO INDIVIDUAL
 # ==========================================
 with tab_individual:
     st.header("👤 Histórico e Evolução")
@@ -149,7 +148,6 @@ with tab_individual:
         dados_p = df_aplicacoes[df_aplicacoes['Nome'] == participante_sel].sort_values('Data')
         
         if not dados_p.empty:
-            # Métricas Rápidas do Participante
             peso_atual = dados_p.iloc[-1]['Peso']
             peso_inicial = dados_p.iloc[0]['Peso']
             perda_total = peso_inicial - peso_atual
@@ -162,48 +160,62 @@ with tab_individual:
             
             st.markdown("---")
             
-            # Gráfico de Duplo Eixo: Peso (Linha) x Dose (Barras)
+            # Gráfico de Duplo Eixo
             fig = go.Figure()
-            
-            # Eixo Y1 - Linha do Peso
             fig.add_trace(go.Scatter(
                 x=dados_p['Data'], y=dados_p['Peso'],
                 name="Peso (kg)", mode="lines+markers",
                 line=dict(color="#1f77b4", width=3),
                 marker=dict(size=8)
             ))
-            
-            # Eixo Y2 - Barras da Dose
             fig.add_trace(go.Bar(
                 x=dados_p['Data'], y=dados_p['Dose'],
                 name="Dose (mg)",
-                marker_color="rgba(44, 160, 44, 0.4)", # Um verde transparente para não ofuscar o peso
+                marker_color="rgba(44, 160, 44, 0.4)",
                 yaxis="y2"
             ))
-            
-            # Configuração dos dois eixos para ficarem bonitos no celular
             fig.update_layout(
                 title=f"Evolução de {participante_sel}",
                 xaxis=dict(title="", tickformat="%d/%m/%Y"),
                 yaxis=dict(title="Peso (kg)", side="left"),
-                yaxis2=dict(title="Dose (mg)", side="right", overlaying="y", showgrid=False, range=[0, 15]), # Range fixo da dose pra ficar na base
+                yaxis2=dict(title="Dose (mg)", side="right", overlaying="y", showgrid=False, range=[0, 15]),
                 legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
                 margin=dict(l=0, r=0, t=50, b=0)
             )
-            
             st.plotly_chart(fig, use_container_width=True)
             
-            # Tabela de Diário de Bordo
+            # Diário de Bordo com Cálculo de Variação
             st.subheader("Diário de Bordo")
             historico_tabela = dados_p[['Data', 'Dose', 'Peso', 'Sintomas', 'Observacoes']].copy()
             historico_tabela['Data'] = historico_tabela['Data'].dt.strftime("%d/%m/%Y")
+            
+            historico_tabela['Variacao'] = historico_tabela['Peso'].diff()
+            
+            peso_formatado = []
+            for index, row in historico_tabela.iterrows():
+                p_atual = row['Peso']
+                var = row['Variacao']
+                
+                if pd.isna(var):
+                    txt_peso = f"{p_atual:.1f} kg"
+                elif var < 0:
+                    txt_peso = f"{p_atual:.1f} kg (⬇️ {abs(var):.1f} kg)"
+                elif var > 0:
+                    txt_peso = f"{p_atual:.1f} kg (⬆️ {var:.1f} kg)"
+                else:
+                    txt_peso = f"{p_atual:.1f} kg (=)"
+                
+                peso_formatado.append(txt_peso)
+                
+            historico_tabela['Peso'] = peso_formatado
+            historico_tabela = historico_tabela.drop(columns=['Variacao'])
+            
             st.dataframe(historico_tabela, use_container_width=True, hide_index=True)
             
         else:
             st.info(f"Ainda não há aplicações registradas para {participante_sel}.")
     else:
         st.info("Cadastre participantes e adicione aplicações para ver o histórico individual.")
-
 
 # ==========================================
 # ABA 3: REGISTRAR DOSE E SINTOMAS
@@ -250,7 +262,6 @@ with tab_registro:
                     else: st.error("❌ Cadastre um frasco ativo primeiro.")
                 else: st.error("❌ Senha incorreta.")
 
-
 # ==========================================
 # ABA 4: FINANÇAS
 # ==========================================
@@ -289,7 +300,6 @@ with tab_financas:
                     ], value_input_option="RAW")
                     st.toast(f"✅ Pagamento de R$ {p_valor} recebido!")
                 else: st.error("❌ Senha incorreta.")
-
 
 # ==========================================
 # ABA 5: AJUSTES
