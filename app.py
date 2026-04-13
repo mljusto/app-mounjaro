@@ -27,7 +27,8 @@ def conectar_planilha():
     creds = Credentials.from_service_account_info(credenciais, scopes=escopos)
     return gspread.authorize(creds).open("Sistema_Mounjaro_DB")
 
-# --- CARREGAR DADOS ---
+# --- CARREGAR DADOS (COM CACHE DE 10 MINUTOS PARA VELOCIDADE) ---
+@st.cache_data(ttl=600)
 def carregar_dados():
     try:
         planilha = conectar_planilha()
@@ -277,6 +278,7 @@ with tab_registro:
                             frasco_selecionado, sintomas_str, observacoes
                         ], value_input_option="RAW")
                         
+                        st.cache_data.clear() # Limpa a memória para atualizar a planilha na hora
                         st.toast(f"✅ Aplicação de {nome_selecionado} salva com sucesso!")
                     else: st.error("❌ Cadastre um frasco ativo primeiro.")
                 else: st.error("❌ Senha incorreta.")
@@ -317,6 +319,8 @@ with tab_financas:
                     conectar_planilha().worksheet("Pagamentos").append_row([
                         p_data.strftime("%d/%m/%Y"), p_nome, str(p_valor)
                     ], value_input_option="RAW")
+                    
+                    st.cache_data.clear() # Limpa a memória
                     st.toast(f"✅ Pagamento de R$ {p_valor} recebido!")
                 else: st.error("❌ Senha incorreta.")
 
@@ -338,6 +342,8 @@ with tab_ajustes:
                     conectar_planilha().worksheet("Frascos").append_row([
                         n_id, str(n_mg), str(n_val), "Ativo"
                     ], value_input_option="RAW")
+                    
+                    st.cache_data.clear()
                     st.toast("✅ Frasco cadastrado com sucesso!")
 
     with st.expander("🗑️ Esgotar Frasco Atual"):
@@ -349,6 +355,8 @@ with tab_ajustes:
                 if s_ina == st.secrets["senha_admin"]:
                     plan = conectar_planilha().worksheet("Frascos")
                     plan.update_cell(plan.find(f_inativar).row, 4, "Esgotado")
+                    
+                    st.cache_data.clear()
                     st.toast(f"✅ Frasco {f_inativar} esgotado!")
 
     with st.expander("👥 Cadastrar Participante"):
@@ -361,4 +369,6 @@ with tab_ajustes:
                     conectar_planilha().worksheet("Participantes").append_row([
                         nome_p, str(meta_p)
                     ], value_input_option="RAW")
+                    
+                    st.cache_data.clear()
                     st.toast(f"✅ Participante {nome_p} adicionado!")
