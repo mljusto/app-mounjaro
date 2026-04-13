@@ -6,7 +6,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="Controle Mounjaro", page_icon="💧", layout="centered")
+st.set_page_config(page_title="Controle Mounjaro", page_icon="💧", layout="centered", initial_sidebar_state="collapsed")
 
 # --- CONEXÃO COM O GOOGLE SHEETS ---
 @st.cache_resource
@@ -27,7 +27,7 @@ def conectar_planilha():
     creds = Credentials.from_service_account_info(credenciais, scopes=escopos)
     return gspread.authorize(creds).open("Sistema_Mounjaro_DB")
 
-# --- CARREGAR DADOS (COM CACHE DE 10 MINUTOS PARA VELOCIDADE) ---
+# --- CARREGAR DADOS ---
 @st.cache_data(ttl=600)
 def carregar_dados():
     try:
@@ -52,18 +52,19 @@ def carregar_dados():
 
 df_frascos, df_aplicacoes, df_participantes, df_pagamentos = carregar_dados()
 
-# --- CABEÇALHO DO APP ---
-st.markdown("<h1 style='text-align: center; color: #1f77b4;'>💧 Mounjaro App</h1>", unsafe_allow_html=True)
-
-# --- ABAS DO APLICATIVO ---
-tab_dashboard, tab_individual, tab_registro, tab_financas, tab_ajustes = st.tabs(["📊 Visão Geral", "👤 Individual", "📝 Nova Dose", "💰 Finanças", "⚙️ Ajustes"])
+# --- MENU LATERAL (Navegação) ---
+st.sidebar.markdown("<h2 style='text-align: center; color: #1f77b4;'>💧 Mounjaro App</h2>", unsafe_allow_html=True)
+st.sidebar.markdown("---")
+pagina = st.sidebar.radio("Navegação", ["📊 Visão Geral", "👤 Individual", "📝 Nova Dose", "💰 Finanças", "⚙️ Ajustes"])
+st.sidebar.markdown("---")
 
 # ==========================================
-# ABA 1: PAINEL DE RESULTADOS GERAIS
+# PÁGINA 1: VISÃO GERAL
 # ==========================================
-with tab_dashboard:
+if pagina == "📊 Visão Geral":
+    st.header("📊 Painel Geral")
     if df_frascos.empty:
-        st.info("👋 Vá na aba 'Ajustes' para começar cadastrando um frasco.")
+        st.info("👋 Vá em 'Ajustes' para começar cadastrando um frasco.")
     else:
         df_frascos['Custo_por_MG'] = df_frascos['Valor Pago'] / df_frascos['MG Total']
         frascos_ativos = df_frascos[df_frascos['Status'] == 'Ativo']
@@ -130,24 +131,22 @@ with tab_dashboard:
                         "Nome": p, 
                         "Peso Atual": f"{peso_atu:.1f} kg{delta_str}",
                         "Perdido Total": f"⬇️ {perda_total:.1f} kg", 
-                        "Progresso Meta": progresso
+                        "Progresso": progresso
                     })
             
             st.dataframe(pd.DataFrame(resumo), use_container_width=True, hide_index=True,
-                         column_config={"Progresso Meta": st.column_config.ProgressColumn("Avanço", format="%d%%", min_value=0, max_value=100)})
+                         column_config={"Progresso": st.column_config.ProgressColumn("Avanço", format="%d%%", min_value=0, max_value=100)})
 
 # ==========================================
-# ABA 2: ACOMPANHAMENTO INDIVIDUAL
+# PÁGINA 2: INDIVIDUAL
 # ==========================================
-with tab_individual:
+elif pagina == "👤 Individual":
     st.header("👤 Histórico e Evolução")
     
     if not df_aplicacoes.empty and not df_participantes.empty:
-        # Adiciona a opção neutra no topo da lista
         lista_participantes = ["Selecione..."] + df_participantes['Nome'].tolist()
-        participante_sel = st.selectbox("Selecione o Participante", lista_participantes, key="sel_part_ind")
+        participante_sel = st.selectbox("Selecione o Participante", lista_participantes)
         
-        # O sistema só carrega os dados se uma pessoa real for selecionada
         if participante_sel != "Selecione...":
             dados_p = df_aplicacoes[df_aplicacoes['Nome'] == participante_sel].sort_values('Data')
             
@@ -176,10 +175,11 @@ with tab_individual:
                 c1, c2, c3 = st.columns(3)
                 c1.metric("Peso Atual", f"{peso_atual:.1f} kg", f"{-perda_total:.1f} kg (Total)", delta_color="inverse")
                 c2.metric(label_dose, f"{peso_atual:.1f} kg" if len(dados_p) > 1 else "N/A", resultado_str, delta_color="inverse")
-                c3.metric("Dose Atual (Nova)", f"{ultima_dose} mg")
+                c3.metric("Dose Atual", f"{ultima_dose} mg")
                 
                 st.markdown("---")
                 
+                # Gráfico com bloqueio de rolagem (dragmode=False) para o dedo não travar no celular
                 fig = go.Figure()
                 fig.add_trace(go.Scatter(
                     x=dados_p['Data'], y=dados_p['Peso'],
@@ -199,9 +199,11 @@ with tab_individual:
                     yaxis=dict(title="Peso (kg)", side="left"),
                     yaxis2=dict(title="Dose (mg)", side="right", overlaying="y", showgrid=False, range=[0, 15]),
                     legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
-                    margin=dict(l=0, r=0, t=50, b=0)
+                    margin=dict(l=0, r=0, t=50, b=0),
+                    dragmode=False # <-- Evita que o dedo fique preso no gráfico no celular
                 )
-                st.plotly_chart(fig, use_container_width=True)
+                # config={'displayModeBar': False} oculta a barrinha superior do gráfico
+                st.plotly_chart(fig, use_container_width=True, config={'displayModeBar': False})
                 
                 st.subheader("Diário de Bordo")
                 historico_tabela = dados_p[['Data', 'Dose', 'Peso', 'Sintomas', 'Observacoes']].copy()
@@ -231,29 +233,24 @@ with tab_individual:
                 historico_tabela = historico_tabela.drop(columns=['Variacao', 'Dose_Anterior'])
                 
                 st.dataframe(historico_tabela, use_container_width=True, hide_index=True)
-                
             else:
                 st.info(f"Ainda não há aplicações registradas para {participante_sel}.")
         else:
-            # Mensagem que aparece enquanto ninguém for selecionado
             st.info("👆 Selecione um participante acima para visualizar o histórico.")
     else:
         st.info("Cadastre participantes e adicione aplicações para ver o histórico individual.")
 
 # ==========================================
-# ABA 3: REGISTRAR DOSE E SINTOMAS
+# PÁGINA 3: REGISTRAR DOSE
 # ==========================================
-with tab_registro:
+elif pagina == "📝 Nova Dose":
     st.header("💉 Nova Aplicação")
     
     lista_frascos = df_frascos[df_frascos['Status'] == 'Ativo']['ID Frasco'].tolist() if not df_frascos.empty else []
-    
-    # Adiciona a opção neutra no topo da lista
     lista_participantes = ["Selecione..."] + df_participantes['Nome'].tolist() if not df_participantes.empty else []
     
     nome_selecionado = st.selectbox("Selecione o Participante", lista_participantes)
     
-    # O formulário só é liberado se uma pessoa real for selecionada
     if nome_selecionado != "Selecione...":
         peso_padrao = 80.0
         if not df_aplicacoes.empty and nome_selecionado in df_aplicacoes['Nome'].values:
@@ -290,13 +287,12 @@ with tab_registro:
                         else: st.error("❌ Cadastre um frasco ativo primeiro.")
                     else: st.error("❌ Senha incorreta.")
     else:
-        # Mensagem orientando o usuário
         st.info("👆 Selecione o participante para liberar o formulário de aplicação.")
 
 # ==========================================
-# ABA 4: FINANÇAS
+# PÁGINA 4: FINANÇAS
 # ==========================================
-with tab_financas:
+elif pagina == "💰 Finanças":
     st.header("💰 Controle Financeiro")
     
     if not df_aplicacoes.empty and not df_participantes.empty:
@@ -318,12 +314,9 @@ with tab_financas:
         st.dataframe(pd.DataFrame(balanco), use_container_width=True, hide_index=True)
 
     with st.expander("💳 Registrar Novo Pagamento"):
-        # Adiciona a opção neutra no topo da lista
         lista_pagadores = ["Selecione..."] + df_participantes['Nome'].tolist() if not df_participantes.empty else ["Selecione..."]
-        
         p_nome = st.selectbox("Quem está pagando?", lista_pagadores)
         
-        # O formulário só é liberado se uma pessoa real for selecionada
         if p_nome != "Selecione...":
             with st.form("form_pagamento", clear_on_submit=True):
                 p_valor = st.number_input("Valor Pago (R$)", min_value=1.0, step=10.0)
@@ -336,16 +329,16 @@ with tab_financas:
                             p_data.strftime("%d/%m/%Y"), p_nome, str(p_valor)
                         ], value_input_option="RAW")
                         
-                        st.cache_data.clear() # Limpa a memória
+                        st.cache_data.clear()
                         st.toast(f"✅ Pagamento de R$ {p_valor} recebido de {p_nome}!")
                     else: st.error("❌ Senha incorreta.")
         else:
             st.info("👆 Selecione quem está pagando para liberar o formulário.")
 
 # ==========================================
-# ABA 5: AJUSTES
+# PÁGINA 5: AJUSTES
 # ==========================================
-with tab_ajustes:
+elif pagina == "⚙️ Ajustes":
     st.header("⚙️ Configurações")
     
     with st.expander("📦 Cadastrar Novo Frasco"):
