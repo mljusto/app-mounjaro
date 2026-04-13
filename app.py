@@ -143,97 +143,100 @@ with tab_individual:
     st.header("👤 Histórico e Evolução")
     
     if not df_aplicacoes.empty and not df_participantes.empty:
-        lista_participantes = df_participantes['Nome'].tolist()
+        # Adiciona a opção neutra no topo da lista
+        lista_participantes = ["Selecione..."] + df_participantes['Nome'].tolist()
         participante_sel = st.selectbox("Selecione o Participante", lista_participantes, key="sel_part_ind")
         
-        dados_p = df_aplicacoes[df_aplicacoes['Nome'] == participante_sel].sort_values('Data')
-        
-        if not dados_p.empty:
-            peso_atual = dados_p.iloc[-1]['Peso']
-            peso_inicial = dados_p.iloc[0]['Peso']
-            perda_total = peso_inicial - peso_atual
-            ultima_dose = dados_p.iloc[-1]['Dose']
+        # O sistema só carrega os dados se uma pessoa real for selecionada
+        if participante_sel != "Selecione...":
+            dados_p = df_aplicacoes[df_aplicacoes['Nome'] == participante_sel].sort_values('Data')
             
-            # Descobre a perda da última semana e a dose que causou ela
-            if len(dados_p) > 1:
-                peso_anterior = dados_p.iloc[-2]['Peso']
-                perda_semana = peso_anterior - peso_atual
-                semana_passada_dose = dados_p.iloc[-2]['Dose']
+            if not dados_p.empty:
+                peso_atual = dados_p.iloc[-1]['Peso']
+                peso_inicial = dados_p.iloc[0]['Peso']
+                perda_total = peso_inicial - peso_atual
+                ultima_dose = dados_p.iloc[-1]['Dose']
                 
-                label_dose = f"Efeito dos {semana_passada_dose}mg"
-                if perda_semana > 0:
-                    resultado_str = f"- {perda_semana:.1f} kg"
-                elif perda_semana < 0:
-                    resultado_str = f"+ {abs(perda_semana):.1f} kg"
-                else:
-                    resultado_str = "Estável"
-            else:
-                label_dose = "Efeito da Dose"
-                resultado_str = "N/A"
-
-            c1, c2, c3 = st.columns(3)
-            c1.metric("Peso Atual", f"{peso_atual:.1f} kg", f"{-perda_total:.1f} kg (Total)", delta_color="inverse")
-            c2.metric(label_dose, f"{peso_atual:.1f} kg" if len(dados_p) > 1 else "N/A", resultado_str, delta_color="inverse")
-            c3.metric("Dose Atual (Nova)", f"{ultima_dose} mg")
-            
-            st.markdown("---")
-            
-            # Gráfico de Duplo Eixo
-            fig = go.Figure()
-            fig.add_trace(go.Scatter(
-                x=dados_p['Data'], y=dados_p['Peso'],
-                name="Peso (kg)", mode="lines+markers",
-                line=dict(color="#1f77b4", width=3),
-                marker=dict(size=8)
-            ))
-            fig.add_trace(go.Bar(
-                x=dados_p['Data'], y=dados_p['Dose'],
-                name="Dose (mg)",
-                marker_color="rgba(44, 160, 44, 0.4)",
-                yaxis="y2"
-            ))
-            fig.update_layout(
-                title=f"Evolução de {participante_sel}",
-                xaxis=dict(title="", tickformat="%d/%m/%Y"),
-                yaxis=dict(title="Peso (kg)", side="left"),
-                yaxis2=dict(title="Dose (mg)", side="right", overlaying="y", showgrid=False, range=[0, 15]),
-                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
-                margin=dict(l=0, r=0, t=50, b=0)
-            )
-            st.plotly_chart(fig, use_container_width=True)
-            
-            # Diário de Bordo com Cálculo de Variação
-            st.subheader("Diário de Bordo")
-            historico_tabela = dados_p[['Data', 'Dose', 'Peso', 'Sintomas', 'Observacoes']].copy()
-            historico_tabela['Data'] = historico_tabela['Data'].dt.strftime("%d/%m/%Y")
-            
-            historico_tabela['Variacao'] = historico_tabela['Peso'].diff()
-            historico_tabela['Dose_Anterior'] = historico_tabela['Dose'].shift(1)
-            
-            peso_formatado = []
-            for index, row in historico_tabela.iterrows():
-                p_atual = row['Peso']
-                var = row['Variacao']
-                d_ant = row['Dose_Anterior']
-                
-                if pd.isna(var):
-                    txt_peso = f"{p_atual:.1f} kg"
-                else:
-                    sinal = "⬇️" if var < 0 else "⬆️" if var > 0 else "="
-                    if pd.notna(d_ant):
-                        txt_peso = f"{p_atual:.1f} kg ({sinal} {abs(var):.1f} kg com {d_ant}mg)"
+                if len(dados_p) > 1:
+                    peso_anterior = dados_p.iloc[-2]['Peso']
+                    perda_semana = peso_anterior - peso_atual
+                    semana_passada_dose = dados_p.iloc[-2]['Dose']
+                    
+                    label_dose = f"Efeito dos {semana_passada_dose}mg"
+                    if perda_semana > 0:
+                        resultado_str = f"- {perda_semana:.1f} kg"
+                    elif perda_semana < 0:
+                        resultado_str = f"+ {abs(perda_semana):.1f} kg"
                     else:
-                        txt_peso = f"{p_atual:.1f} kg ({sinal} {abs(var):.1f} kg)"
+                        resultado_str = "Estável"
+                else:
+                    label_dose = "Efeito da Dose"
+                    resultado_str = "N/A"
+
+                c1, c2, c3 = st.columns(3)
+                c1.metric("Peso Atual", f"{peso_atual:.1f} kg", f"{-perda_total:.1f} kg (Total)", delta_color="inverse")
+                c2.metric(label_dose, f"{peso_atual:.1f} kg" if len(dados_p) > 1 else "N/A", resultado_str, delta_color="inverse")
+                c3.metric("Dose Atual (Nova)", f"{ultima_dose} mg")
                 
-                peso_formatado.append(txt_peso)
+                st.markdown("---")
                 
-            historico_tabela['Peso'] = peso_formatado
-            historico_tabela = historico_tabela.drop(columns=['Variacao', 'Dose_Anterior'])
-            
-            st.dataframe(historico_tabela, use_container_width=True, hide_index=True)
-            
+                fig = go.Figure()
+                fig.add_trace(go.Scatter(
+                    x=dados_p['Data'], y=dados_p['Peso'],
+                    name="Peso (kg)", mode="lines+markers",
+                    line=dict(color="#1f77b4", width=3),
+                    marker=dict(size=8)
+                ))
+                fig.add_trace(go.Bar(
+                    x=dados_p['Data'], y=dados_p['Dose'],
+                    name="Dose (mg)",
+                    marker_color="rgba(44, 160, 44, 0.4)",
+                    yaxis="y2"
+                ))
+                fig.update_layout(
+                    title=f"Evolução de {participante_sel}",
+                    xaxis=dict(title="", tickformat="%d/%m/%Y"),
+                    yaxis=dict(title="Peso (kg)", side="left"),
+                    yaxis2=dict(title="Dose (mg)", side="right", overlaying="y", showgrid=False, range=[0, 15]),
+                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="center", x=0.5),
+                    margin=dict(l=0, r=0, t=50, b=0)
+                )
+                st.plotly_chart(fig, use_container_width=True)
+                
+                st.subheader("Diário de Bordo")
+                historico_tabela = dados_p[['Data', 'Dose', 'Peso', 'Sintomas', 'Observacoes']].copy()
+                historico_tabela['Data'] = historico_tabela['Data'].dt.strftime("%d/%m/%Y")
+                
+                historico_tabela['Variacao'] = historico_tabela['Peso'].diff()
+                historico_tabela['Dose_Anterior'] = historico_tabela['Dose'].shift(1)
+                
+                peso_formatado = []
+                for index, row in historico_tabela.iterrows():
+                    p_atual = row['Peso']
+                    var = row['Variacao']
+                    d_ant = row['Dose_Anterior']
+                    
+                    if pd.isna(var):
+                        txt_peso = f"{p_atual:.1f} kg"
+                    else:
+                        sinal = "⬇️" if var < 0 else "⬆️" if var > 0 else "="
+                        if pd.notna(d_ant):
+                            txt_peso = f"{p_atual:.1f} kg ({sinal} {abs(var):.1f} kg com {d_ant}mg)"
+                        else:
+                            txt_peso = f"{p_atual:.1f} kg ({sinal} {abs(var):.1f} kg)"
+                    
+                    peso_formatado.append(txt_peso)
+                    
+                historico_tabela['Peso'] = peso_formatado
+                historico_tabela = historico_tabela.drop(columns=['Variacao', 'Dose_Anterior'])
+                
+                st.dataframe(historico_tabela, use_container_width=True, hide_index=True)
+                
+            else:
+                st.info(f"Ainda não há aplicações registradas para {participante_sel}.")
         else:
-            st.info(f"Ainda não há aplicações registradas para {participante_sel}.")
+            # Mensagem que aparece enquanto ninguém for selecionado
+            st.info("👆 Selecione um participante acima para visualizar o histórico.")
     else:
         st.info("Cadastre participantes e adicione aplicações para ver o histórico individual.")
 
@@ -244,44 +247,51 @@ with tab_registro:
     st.header("💉 Nova Aplicação")
     
     lista_frascos = df_frascos[df_frascos['Status'] == 'Ativo']['ID Frasco'].tolist() if not df_frascos.empty else []
-    lista_participantes = df_participantes['Nome'].tolist() if not df_participantes.empty else []
+    
+    # Adiciona a opção neutra no topo da lista
+    lista_participantes = ["Selecione..."] + df_participantes['Nome'].tolist() if not df_participantes.empty else []
     
     nome_selecionado = st.selectbox("Selecione o Participante", lista_participantes)
     
-    peso_padrao = 80.0
-    if not df_aplicacoes.empty and nome_selecionado in df_aplicacoes['Nome'].values:
-        peso_padrao = float(df_aplicacoes[df_aplicacoes['Nome'] == nome_selecionado].iloc[-1]['Peso'])
+    # O formulário só é liberado se uma pessoa real for selecionada
+    if nome_selecionado != "Selecione...":
+        peso_padrao = 80.0
+        if not df_aplicacoes.empty and nome_selecionado in df_aplicacoes['Nome'].values:
+            peso_padrao = float(df_aplicacoes[df_aplicacoes['Nome'] == nome_selecionado].iloc[-1]['Peso'])
 
-    with st.container(border=True):
-        with st.form("form_nova_dose", clear_on_submit=False):
-            data = st.date_input("Data da Aplicação", format="DD/MM/YYYY")
-            frasco_selecionado = st.selectbox("Frasco Utilizado", lista_frascos)
-            
-            c1, c2 = st.columns(2)
-            with c1: dose = st.number_input("Dose (mg)", min_value=2.5, step=2.5)
-            with c2: peso = st.number_input("Peso Atual (kg)", min_value=40.0, step=0.1, value=peso_padrao)
-            
-            st.markdown("---")
-            opcoes_sintomas = ["Nenhum", "Saciedade alta", "Enjoo", "Fadiga", "Dor de cabeça", "Constipação", "Azia"]
-            sintomas = st.multiselect("Sintomas na última semana", opcoes_sintomas)
-            observacoes = st.text_input("Observações Extras (Opcional)")
+        with st.container(border=True):
+            with st.form("form_nova_dose", clear_on_submit=False):
+                data = st.date_input("Data da Aplicação", format="DD/MM/YYYY")
+                frasco_selecionado = st.selectbox("Frasco Utilizado", lista_frascos)
                 
-            senha_dose = st.text_input("Senha de Admin", type="password")
-            
-            if st.form_submit_button("Salvar Registro", use_container_width=True):
-                if senha_dose == st.secrets["senha_admin"]:
-                    if frasco_selecionado:
-                        sintomas_str = ", ".join(sintomas) if sintomas else "Não informado"
-                        
-                        conectar_planilha().worksheet("Aplicacoes").append_row([
-                            data.strftime("%d/%m/%Y"), nome_selecionado, str(dose), str(peso), 
-                            frasco_selecionado, sintomas_str, observacoes
-                        ], value_input_option="RAW")
-                        
-                        st.cache_data.clear() # Limpa a memória para atualizar a planilha na hora
-                        st.toast(f"✅ Aplicação de {nome_selecionado} salva com sucesso!")
-                    else: st.error("❌ Cadastre um frasco ativo primeiro.")
-                else: st.error("❌ Senha incorreta.")
+                c1, c2 = st.columns(2)
+                with c1: dose = st.number_input("Dose (mg)", min_value=2.5, step=2.5)
+                with c2: peso = st.number_input("Peso Atual (kg)", min_value=40.0, step=0.1, value=peso_padrao)
+                
+                st.markdown("---")
+                opcoes_sintomas = ["Nenhum", "Saciedade alta", "Enjoo", "Fadiga", "Dor de cabeça", "Constipação", "Azia"]
+                sintomas = st.multiselect("Sintomas na última semana", opcoes_sintomas)
+                observacoes = st.text_input("Observações Extras (Opcional)")
+                    
+                senha_dose = st.text_input("Senha de Admin", type="password")
+                
+                if st.form_submit_button("Salvar Registro", use_container_width=True):
+                    if senha_dose == st.secrets["senha_admin"]:
+                        if frasco_selecionado:
+                            sintomas_str = ", ".join(sintomas) if sintomas else "Não informado"
+                            
+                            conectar_planilha().worksheet("Aplicacoes").append_row([
+                                data.strftime("%d/%m/%Y"), nome_selecionado, str(dose), str(peso), 
+                                frasco_selecionado, sintomas_str, observacoes
+                            ], value_input_option="RAW")
+                            
+                            st.cache_data.clear()
+                            st.toast(f"✅ Aplicação de {nome_selecionado} salva com sucesso!")
+                        else: st.error("❌ Cadastre um frasco ativo primeiro.")
+                    else: st.error("❌ Senha incorreta.")
+    else:
+        # Mensagem orientando o usuário
+        st.info("👆 Selecione o participante para liberar o formulário de aplicação.")
 
 # ==========================================
 # ABA 4: FINANÇAS
