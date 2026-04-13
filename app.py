@@ -318,21 +318,29 @@ with tab_financas:
         st.dataframe(pd.DataFrame(balanco), use_container_width=True, hide_index=True)
 
     with st.expander("💳 Registrar Novo Pagamento"):
-        with st.form("form_pagamento", clear_on_submit=True):
-            p_nome = st.selectbox("Quem está pagando?", df_participantes['Nome'].tolist() if not df_participantes.empty else [])
-            p_valor = st.number_input("Valor Pago (R$)", min_value=1.0, step=10.0)
-            p_data = st.date_input("Data", format="DD/MM/YYYY")
-            p_senha = st.text_input("Senha", type="password")
-            
-            if st.form_submit_button("Salvar Pagamento"):
-                if p_senha == st.secrets["senha_admin"]:
-                    conectar_planilha().worksheet("Pagamentos").append_row([
-                        p_data.strftime("%d/%m/%Y"), p_nome, str(p_valor)
-                    ], value_input_option="RAW")
-                    
-                    st.cache_data.clear() # Limpa a memória
-                    st.toast(f"✅ Pagamento de R$ {p_valor} recebido!")
-                else: st.error("❌ Senha incorreta.")
+        # Adiciona a opção neutra no topo da lista
+        lista_pagadores = ["Selecione..."] + df_participantes['Nome'].tolist() if not df_participantes.empty else ["Selecione..."]
+        
+        p_nome = st.selectbox("Quem está pagando?", lista_pagadores)
+        
+        # O formulário só é liberado se uma pessoa real for selecionada
+        if p_nome != "Selecione...":
+            with st.form("form_pagamento", clear_on_submit=True):
+                p_valor = st.number_input("Valor Pago (R$)", min_value=1.0, step=10.0)
+                p_data = st.date_input("Data", format="DD/MM/YYYY")
+                p_senha = st.text_input("Senha", type="password")
+                
+                if st.form_submit_button("Salvar Pagamento"):
+                    if p_senha == st.secrets["senha_admin"]:
+                        conectar_planilha().worksheet("Pagamentos").append_row([
+                            p_data.strftime("%d/%m/%Y"), p_nome, str(p_valor)
+                        ], value_input_option="RAW")
+                        
+                        st.cache_data.clear() # Limpa a memória
+                        st.toast(f"✅ Pagamento de R$ {p_valor} recebido de {p_nome}!")
+                    else: st.error("❌ Senha incorreta.")
+        else:
+            st.info("👆 Selecione quem está pagando para liberar o formulário.")
 
 # ==========================================
 # ABA 5: AJUSTES
