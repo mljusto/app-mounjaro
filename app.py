@@ -6,7 +6,7 @@ import plotly.express as px
 import plotly.graph_objects as go
 
 # --- CONFIGURAÇÃO DA PÁGINA ---
-st.set_page_config(page_title="Controle Mounjaro", page_icon="💧", layout="centered", initial_sidebar_state="collapsed")
+st.set_page_config(page_title="Controle Mounjaro", page_icon="💧", layout="centered")
 
 # --- CONEXÃO COM O GOOGLE SHEETS ---
 @st.cache_resource
@@ -52,19 +52,18 @@ def carregar_dados():
 
 df_frascos, df_aplicacoes, df_participantes, df_pagamentos = carregar_dados()
 
-# --- MENU LATERAL (Navegação) ---
-st.sidebar.markdown("<h2 style='text-align: center; color: #1f77b4;'>💧 Mounjaro App</h2>", unsafe_allow_html=True)
-st.sidebar.markdown("---")
-pagina = st.sidebar.radio("Navegação", ["📊 Visão Geral", "👤 Individual", "📝 Nova Dose", "💰 Finanças", "⚙️ Ajustes"])
-st.sidebar.markdown("---")
+# --- CABEÇALHO DO APP ---
+st.markdown("<h1 style='text-align: center; color: #1f77b4;'>💧 Mounjaro App</h1>", unsafe_allow_html=True)
+
+# --- ABAS DO APLICATIVO ---
+tab_dashboard, tab_individual, tab_registro, tab_financas, tab_ajustes = st.tabs(["📊 Visão Geral", "👤 Individual", "📝 Nova Dose", "💰 Finanças", "⚙️ Ajustes"])
 
 # ==========================================
-# PÁGINA 1: VISÃO GERAL
+# ABA 1: PAINEL DE RESULTADOS GERAIS
 # ==========================================
-if pagina == "📊 Visão Geral":
-    st.header("📊 Painel Geral")
+with tab_dashboard:
     if df_frascos.empty:
-        st.info("👋 Vá em 'Ajustes' para começar cadastrando um frasco.")
+        st.info("👋 Vá na aba 'Ajustes' para começar cadastrando um frasco.")
     else:
         df_frascos['Custo_por_MG'] = df_frascos['Valor Pago'] / df_frascos['MG Total']
         frascos_ativos = df_frascos[df_frascos['Status'] == 'Ativo']
@@ -138,14 +137,14 @@ if pagina == "📊 Visão Geral":
                          column_config={"Progresso": st.column_config.ProgressColumn("Avanço", format="%d%%", min_value=0, max_value=100)})
 
 # ==========================================
-# PÁGINA 2: INDIVIDUAL
+# ABA 2: ACOMPANHAMENTO INDIVIDUAL
 # ==========================================
-elif pagina == "👤 Individual":
+with tab_individual:
     st.header("👤 Histórico e Evolução")
     
     if not df_aplicacoes.empty and not df_participantes.empty:
         lista_participantes = ["Selecione..."] + df_participantes['Nome'].tolist()
-        participante_sel = st.selectbox("Selecione o Participante", lista_participantes)
+        participante_sel = st.selectbox("Selecione o Participante", lista_participantes, key="sel_part_ind")
         
         if participante_sel != "Selecione...":
             dados_p = df_aplicacoes[df_aplicacoes['Nome'] == participante_sel].sort_values('Data')
@@ -241,9 +240,9 @@ elif pagina == "👤 Individual":
         st.info("Cadastre participantes e adicione aplicações para ver o histórico individual.")
 
 # ==========================================
-# PÁGINA 3: REGISTRAR DOSE
+# ABA 3: REGISTRAR DOSE E SINTOMAS
 # ==========================================
-elif pagina == "📝 Nova Dose":
+with tab_registro:
     st.header("💉 Nova Aplicação")
     
     lista_frascos = df_frascos[df_frascos['Status'] == 'Ativo']['ID Frasco'].tolist() if not df_frascos.empty else []
@@ -290,9 +289,9 @@ elif pagina == "📝 Nova Dose":
         st.info("👆 Selecione o participante para liberar o formulário de aplicação.")
 
 # ==========================================
-# PÁGINA 4: FINANÇAS
+# ABA 4: FINANÇAS
 # ==========================================
-elif pagina == "💰 Finanças":
+with tab_financas:
     st.header("💰 Controle Financeiro")
     
     if not df_aplicacoes.empty and not df_participantes.empty:
@@ -336,9 +335,9 @@ elif pagina == "💰 Finanças":
             st.info("👆 Selecione quem está pagando para liberar o formulário.")
 
 # ==========================================
-# PÁGINA 5: AJUSTES
+# ABA 5: AJUSTES
 # ==========================================
-elif pagina == "⚙️ Ajustes":
+with tab_ajustes:
     st.header("⚙️ Configurações")
     
     with st.expander("📦 Cadastrar Novo Frasco"):
