@@ -382,3 +382,5 @@ with tab_ajustes:
                     
                     st.cache_data.clear()
                     st.toast(f"✅ Participante {nome_p} adicionado!")
+
+# atualizar
